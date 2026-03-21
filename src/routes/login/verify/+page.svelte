@@ -32,7 +32,6 @@
 				name="code"
 				type="text"
 				inputmode="numeric"
-				pattern="[0-9]{6}"
 				maxlength="7"
 				required
 				placeholder="000000"
