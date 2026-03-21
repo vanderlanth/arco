@@ -1,14 +1,58 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { existsSync } from 'node:fs';
+import { existsSync, chmodSync, createWriteStream } from 'node:fs';
+import { pipeline } from 'node:stream/promises';
 import { join } from 'node:path';
 
-const run = promisify(execFile);
+const execFileAsync = promisify(execFile);
 
-// On Vercel (Linux) the binary is bundled at $CWD/bin/yt-dlp; locally use the system PATH.
-const BUNDLED_BINARY = join(process.cwd(), 'bin', 'yt-dlp');
-const YT_DLP =
-	process.platform === 'linux' && existsSync(BUNDLED_BINARY) ? BUNDLED_BINARY : 'yt-dlp';
+const YT_DLP_DOWNLOAD_URL =
+	'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux';
+const TMP_BINARY = '/tmp/yt-dlp';
+
+let resolvedBinary: string | null = null;
+let binaryDownloadPromise: Promise<string> | null = null;
+
+async function getBinary(): Promise<string> {
+	if (resolvedBinary) return resolvedBinary;
+
+	// On macOS/Windows use the system yt-dlp
+	if (process.platform !== 'linux') {
+		resolvedBinary = 'yt-dlp';
+		return resolvedBinary;
+	}
+
+	// Try all known bundled locations on Linux (Vercel Lambda = /var/task)
+	const candidates = ['/var/task/bin/yt-dlp', join(process.cwd(), 'bin', 'yt-dlp'), TMP_BINARY];
+	for (const p of candidates) {
+		if (existsSync(p)) {
+			resolvedBinary = p;
+			console.log('[yt-dlp] using binary at', p);
+			return resolvedBinary;
+		}
+	}
+
+	// Last resort: download to /tmp (persists for the Lambda container lifetime)
+	if (!binaryDownloadPromise) {
+		binaryDownloadPromise = (async () => {
+			console.log('[yt-dlp] binary not found, downloading to /tmp...');
+			const resp = await fetch(YT_DLP_DOWNLOAD_URL, { redirect: 'follow' });
+			if (!resp.ok) throw new Error(`Failed to download yt-dlp: HTTP ${resp.status}`);
+			await pipeline(resp.body as unknown as NodeJS.ReadableStream, createWriteStream(TMP_BINARY));
+			chmodSync(TMP_BINARY, 0o755);
+			console.log('[yt-dlp] downloaded successfully');
+			return TMP_BINARY;
+		})();
+	}
+
+	resolvedBinary = await binaryDownloadPromise;
+	return resolvedBinary;
+}
+
+async function run(args: string[]) {
+	const binary = await getBinary();
+	return execFileAsync(binary, args);
+}
 
 export interface AudioStreamInfo {
 	url: string;
@@ -44,7 +88,7 @@ export async function getAudioUrl(videoId: string): Promise<AudioStreamInfo> {
 }
 
 async function resolveAudioUrl(videoId: string): Promise<AudioStreamInfo> {
-	const { stdout } = await run(YT_DLP, [
+	const { stdout } = await run([
 		'--no-warnings',
 		'--no-playlist',
 		'-f',
@@ -89,7 +133,7 @@ export async function searchYouTube(
 	query: string,
 	limit = 5
 ): Promise<YouTubeSearchResult[]> {
-	const { stdout } = await run(YT_DLP, [
+	const { stdout } = await run([
 		'--no-warnings',
 		'--flat-playlist',
 		'--dump-json',
