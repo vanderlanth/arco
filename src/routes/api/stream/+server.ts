@@ -1,9 +1,14 @@
 import { error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import type { Config } from '@sveltejs/adapter-vercel';
 import { getAudioUrl, searchYouTube } from '$lib/server/youtube';
 import { db } from '$lib/server/db';
 import { tracks } from '$lib/server/db/schema';
 import { eq } from 'drizzle-orm';
+
+export const config: Config = {
+	maxDuration: 60
+};
 
 export const GET: RequestHandler = async ({ url }) => {
 	const videoIdParam = url.searchParams.get('videoId');
@@ -34,8 +39,10 @@ export const GET: RequestHandler = async ({ url }) => {
 	try {
 		audio = await getAudioUrl(videoId);
 	} catch (e) {
-		console.error('[stream] getAudioUrl failed:', e);
-		throw error(502, `Audio resolution failed: ${(e as Error).message}`);
+		const err = e as { message?: string; stderr?: string };
+		const detail = err.stderr?.trim() || err.message || String(e);
+		console.error('[stream] getAudioUrl failed:', detail);
+		throw error(502, `yt-dlp error: ${detail}`);
 	}
 
 	return new Response(null, {
