@@ -37,7 +37,7 @@ export const actions: Actions = {
 			throw redirect(303, '/login');
 		}
 
-		const code = String(data.get('code') ?? '').trim();
+		const code = String(data.get('code') ?? '').replace(/\D/g, '');
 
 		const isValid = speakeasy.totp.verify({
 			secret: TOTP_SECRET,

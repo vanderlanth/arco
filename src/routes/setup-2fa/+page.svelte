@@ -7,6 +7,11 @@
 	const success = $derived(
 		form && 'verified' in form && form.verified ? (form as SuccessResult) : null
 	);
+
+	function stripNonDigits(e: Event) {
+		const input = e.target as HTMLInputElement;
+		input.value = input.value.replace(/\D/g, '').slice(0, 6);
+	}
 </script>
 
 <svelte:head>
@@ -61,17 +66,18 @@
 					<label for="code" class="mb-1 block text-sm font-medium text-text-secondary">
 						Verification code
 					</label>
-					<input
-						id="code"
-						name="code"
-						type="text"
-						inputmode="numeric"
-						pattern="[0-9]{6}"
-						maxlength="6"
-						required
-						placeholder="000000"
-						class="w-full rounded-lg border border-border bg-surface px-3 py-2 text-center font-mono text-xl tracking-widest text-text-primary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
-					/>
+				<input
+					id="code"
+					name="code"
+					type="text"
+					inputmode="numeric"
+					pattern="[0-9]{6}"
+					maxlength="7"
+					required
+					placeholder="000000"
+					oninput={stripNonDigits}
+					class="w-full rounded-lg border border-border bg-surface px-3 py-2 text-center font-mono text-xl tracking-widest text-text-primary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+				/>
 				</div>
 				<button
 					type="submit"

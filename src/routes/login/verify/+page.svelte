@@ -2,6 +2,11 @@
 	import type { PageData, ActionData } from './$types';
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();
+
+	function stripNonDigits(e: Event) {
+		const input = e.target as HTMLInputElement;
+		input.value = input.value.replace(/\D/g, '').slice(0, 6);
+	}
 </script>
 
 <svelte:head>
@@ -28,10 +33,11 @@
 				type="text"
 				inputmode="numeric"
 				pattern="[0-9]{6}"
-				maxlength="6"
+				maxlength="7"
 				required
 				placeholder="000000"
 				autocomplete="one-time-code"
+				oninput={stripNonDigits}
 				class="w-full rounded-lg border border-border bg-surface px-3 py-2 text-center font-mono text-2xl tracking-widest text-text-primary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
 			/>
 			<button

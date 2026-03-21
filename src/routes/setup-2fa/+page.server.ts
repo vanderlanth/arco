@@ -43,7 +43,7 @@ export const actions: Actions = {
 			return fail(400, { error: 'Setup session expired. Please refresh the page.' });
 		}
 
-		const code = String(data.get('code') ?? '').trim();
+		const code = String(data.get('code') ?? '').replace(/\D/g, '');
 
 		const isValid = speakeasy.totp.verify({
 			secret,
