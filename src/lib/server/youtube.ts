@@ -1,5 +1,14 @@
-import ytdl from '@distube/ytdl-core';
-import ytsr from 'ytsr';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
+
+const run = promisify(execFile);
+
+// On Vercel (Linux) the binary is bundled at $CWD/bin/yt-dlp; locally use the system PATH.
+const BUNDLED_BINARY = join(process.cwd(), 'bin', 'yt-dlp');
+const YT_DLP =
+	process.platform === 'linux' && existsSync(BUNDLED_BINARY) ? BUNDLED_BINARY : 'yt-dlp';
 
 export interface AudioStreamInfo {
 	url: string;
@@ -35,16 +44,27 @@ export async function getAudioUrl(videoId: string): Promise<AudioStreamInfo> {
 }
 
 async function resolveAudioUrl(videoId: string): Promise<AudioStreamInfo> {
-	const infoResult = await ytdl.getInfo(videoId);
-	const format = ytdl.chooseFormat(infoResult.formats, {
-		quality: 'highestaudio',
-		filter: 'audioonly'
-	});
+	const { stdout } = await run(YT_DLP, [
+		'--no-warnings',
+		'--no-playlist',
+		'-f',
+		'bestaudio',
+		'--get-url',
+		'--print',
+		'%(ext)s',
+		`https://www.youtube.com/watch?v=${videoId}`
+	]);
 
-	const ext = format.container ?? 'webm';
-	const mimeType = MIME_MAP[ext] ?? 'audio/webm';
-	const info: AudioStreamInfo = { url: format.url, mimeType };
+	const lines = stdout.trim().split('\n');
+	const ext = lines[0]?.trim() ?? 'webm';
+	const url = lines[1]?.trim();
 
+	if (!url) throw new Error('yt-dlp returned no audio URL');
+
+	const info: AudioStreamInfo = {
+		url,
+		mimeType: MIME_MAP[ext] ?? 'audio/webm'
+	};
 	audioUrlCache.set(videoId, { info, expiresAt: Date.now() + CACHE_TTL });
 
 	if (audioUrlCache.size > 200) {
@@ -69,19 +89,35 @@ export async function searchYouTube(
 	query: string,
 	limit = 5
 ): Promise<YouTubeSearchResult[]> {
-	const searchResults = await ytsr(query, { limit });
+	const { stdout } = await run(YT_DLP, [
+		'--no-warnings',
+		'--flat-playlist',
+		'--dump-json',
+		`ytsearch${limit}:${query}`
+	]);
 
 	const results: YouTubeSearchResult[] = [];
-	for (const item of searchResults.items) {
-		if (item.type !== 'video') continue;
-		results.push({
-			videoId: item.id,
-			title: item.title ?? 'Unknown',
-			artist: item.author?.name ?? 'Unknown',
-			thumbnail: item.bestThumbnail?.url ?? '',
-			duration: item.duration ?? ''
-		});
-		if (results.length >= limit) break;
+	for (const line of stdout.trim().split('\n')) {
+		if (!line) continue;
+		try {
+			const item = JSON.parse(line);
+			results.push({
+				videoId: item.id,
+				title: item.title ?? 'Unknown',
+				artist: item.channel ?? item.uploader ?? 'Unknown',
+				thumbnail: item.thumbnails?.[0]?.url ?? '',
+				duration: formatDuration(item.duration)
+			});
+		} catch {
+			continue;
+		}
 	}
 	return results;
+}
+
+function formatDuration(seconds: number | null | undefined): string {
+	if (!seconds) return '';
+	const m = Math.floor(seconds / 60);
+	const s = Math.floor(seconds % 60);
+	return `${m}:${s.toString().padStart(2, '0')}`;
 }

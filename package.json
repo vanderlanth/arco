@@ -6,6 +6,7 @@
 	"scripts": {
 		"dev": "vite dev",
 		"build": "vite build",
+		"vercel-build": "node scripts/download-yt-dlp.mjs && vite build && node scripts/inject-yt-dlp.mjs",
 		"preview": "vite preview",
 		"prepare": "svelte-kit sync || echo ''",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
@@ -30,14 +31,12 @@
 		"vite": "^6.0.0"
 	},
 	"dependencies": {
-		"@distube/ytdl-core": "^4.16.12",
 		"@libsql/client": "^0.14.0",
 		"carbon-icons-svelte": "^13.9.1",
 		"drizzle-orm": "^0.38.0",
 		"fuse.js": "^7.0.0",
 		"qrcode": "^1.5.0",
 		"speakeasy": "^2.0.0",
-		"svelte-dnd-action": "^0.9.69",
-		"ytsr": "^3.8.4"
+		"svelte-dnd-action": "^0.9.69"
 	}
 }

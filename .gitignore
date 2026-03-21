@@ -1,4 +1,5 @@
 node_modules
+bin/
 .svelte-kit
 build
 .vercel
