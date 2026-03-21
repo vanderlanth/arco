@@ -30,7 +30,13 @@ export const GET: RequestHandler = async ({ url }) => {
 
 	if (!videoId) throw error(400, 'Missing videoId or id');
 
-	const audio = await getAudioUrl(videoId);
+	let audio;
+	try {
+		audio = await getAudioUrl(videoId);
+	} catch (e) {
+		console.error('[stream] getAudioUrl failed:', e);
+		throw error(502, `Audio resolution failed: ${(e as Error).message}`);
+	}
 
 	const upstream = await fetch(audio.url, {
 		headers: { 'User-Agent': 'Mozilla/5.0' }
