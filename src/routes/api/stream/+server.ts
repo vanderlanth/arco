@@ -38,22 +38,11 @@ export const GET: RequestHandler = async ({ url }) => {
 		throw error(502, `Audio resolution failed: ${(e as Error).message}`);
 	}
 
-	const upstream = await fetch(audio.url, {
-		headers: { 'User-Agent': 'Mozilla/5.0' }
+	return new Response(null, {
+		status: 302,
+		headers: {
+			Location: audio.url,
+			'Cache-Control': 'no-store'
+		}
 	});
-
-	if (!upstream.ok || !upstream.body) {
-		throw error(502, 'Failed to fetch audio stream');
-	}
-
-	const headers: Record<string, string> = {
-		'Content-Type': audio.mimeType,
-		'Cache-Control': 'no-store',
-		'Accept-Ranges': 'none'
-	};
-
-	const cl = upstream.headers.get('content-length');
-	if (cl) headers['Content-Length'] = cl;
-
-	return new Response(upstream.body, { status: 200, headers });
 };
