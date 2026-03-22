@@ -123,9 +123,6 @@
 		} else {
 			audioEl.pause();
 		}
-		if ('mediaSession' in navigator) {
-			navigator.mediaSession.playbackState = playerState.isPlaying ? 'playing' : 'paused';
-		}
 	});
 
 	$effect(() => {
@@ -167,6 +164,18 @@
 
 	function handleCanPlay() {
 		playerState.setLoading(false);
+	}
+
+	function handlePlaying() {
+		if ('mediaSession' in navigator) {
+			navigator.mediaSession.playbackState = 'playing';
+		}
+	}
+
+	function handlePause() {
+		if ('mediaSession' in navigator) {
+			navigator.mediaSession.playbackState = 'paused';
+		}
 	}
 
 	function handleAudioError() {
@@ -213,6 +222,8 @@
 	ontimeupdate={handleTimeUpdate}
 	onloadedmetadata={handleLoadedMetadata}
 	oncanplay={handleCanPlay}
+	onplaying={handlePlaying}
+	onpause={handlePause}
 	onerror={handleAudioError}
 	onended={handleEnded}
 	preload="auto"
