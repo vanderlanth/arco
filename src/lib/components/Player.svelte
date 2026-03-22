@@ -123,6 +123,9 @@
 		} else {
 			audioEl.pause();
 		}
+		if ('mediaSession' in navigator) {
+			navigator.mediaSession.playbackState = playerState.isPlaying ? 'playing' : 'paused';
+		}
 	});
 
 	$effect(() => {
