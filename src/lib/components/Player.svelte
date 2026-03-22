@@ -156,9 +156,9 @@
 			audioEl.play().catch(() => {});
 		} else {
 			audioEl.pause();
-		}
-		if ('mediaSession' in navigator) {
-			navigator.mediaSession.playbackState = playerState.isPlaying ? 'playing' : 'paused';
+			if ('mediaSession' in navigator) {
+				navigator.mediaSession.playbackState = 'paused';
+			}
 		}
 	});
 
@@ -197,6 +197,9 @@
 
 	function handlePlaying() {
 		trackChanging = false;
+		if ('mediaSession' in navigator) {
+			navigator.mediaSession.playbackState = 'playing';
+		}
 	}
 
 	function handlePause() {
