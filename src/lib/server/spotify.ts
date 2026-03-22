@@ -35,7 +35,10 @@ export async function fetchSpotifyMetadata(trackId: string): Promise<SpotifyTrac
 	const res = await fetch(`https://api.spotify.com/v1/tracks/${trackId}`, {
 		headers: { Authorization: `Bearer ${token}` }
 	});
-	if (!res.ok) throw new Error(`Spotify API failed: ${res.status}`);
+	if (!res.ok) {
+		const body = await res.text();
+		throw new Error(`Spotify API failed: ${res.status} — ${body}`);
+	}
 	const data = await res.json();
 	return {
 		spotifyId: trackId,
