@@ -20,8 +20,14 @@ export const GET: RequestHandler = async ({ url }) => {
 
 	const spotifyId = extractSpotifyTrackId(rawUrl);
 	if (spotifyId) {
-		const meta = await fetchSpotifyMetadata(spotifyId);
-		return json({ type: 'spotify', ...meta });
+		try {
+			const meta = await fetchSpotifyMetadata(spotifyId);
+			return json({ type: 'spotify', ...meta });
+		} catch (e) {
+			const msg = e instanceof Error ? e.message : String(e);
+			console.error('[resolve-url] Spotify fetch failed:', msg);
+			throw error(502, `Spotify error: ${msg}`);
+		}
 	}
 
 	const videoId = extractYouTubeVideoId(rawUrl);
