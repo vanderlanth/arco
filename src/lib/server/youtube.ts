@@ -6,6 +6,12 @@ import { join } from 'node:path';
 
 const execFileAsync = promisify(execFile);
 
+function getProxyArgs(): string[] {
+	const proxy = process.env.YT_PROXY;
+	if (!proxy) return [];
+	return ['--proxy', proxy];
+}
+
 const YT_DLP_DOWNLOAD_URL =
 	'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux';
 const TMP_BINARY = '/tmp/yt-dlp';
@@ -93,6 +99,7 @@ async function resolveAudioUrl(videoId: string): Promise<AudioStreamInfo> {
 		'--no-playlist',
 		'-f', 'bestaudio/best',
 		'--extractor-args', 'youtube:player_client=tv_embedded,tv,ios',
+		...getProxyArgs(),
 		'--get-url',
 		'--print', '%(ext)s',
 		`https://www.youtube.com/watch?v=${videoId}`
@@ -136,6 +143,7 @@ export async function searchYouTube(
 		'--no-warnings',
 		'--flat-playlist',
 		'--dump-json',
+		...getProxyArgs(),
 		`ytsearch${limit}:${query}`
 	]);
 
