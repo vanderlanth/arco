@@ -1,4 +1,21 @@
-const PIPED_API = 'https://pipedapi.kavin.rocks';
+const PIPED_INSTANCES = [
+	'https://pipedapi.kavin.rocks',
+	'https://piped-api.garudalinux.org',
+	'https://api.piped.yt',
+	'https://piped.tokhmi.xyz'
+];
+
+async function pipedFetch(path: string): Promise<Response> {
+	for (const base of PIPED_INSTANCES) {
+		try {
+			const res = await fetch(`${base}${path}`);
+			if (res.ok) return res;
+		} catch {
+			// try next instance
+		}
+	}
+	throw new Error('All Piped instances failed');
+}
 
 export interface AudioStreamInfo {
 	url: string;
@@ -26,8 +43,7 @@ export async function getAudioUrl(videoId: string): Promise<AudioStreamInfo> {
 }
 
 async function resolveAudioUrl(videoId: string): Promise<AudioStreamInfo> {
-	const res = await fetch(`${PIPED_API}/streams/${videoId}`);
-	if (!res.ok) throw new Error(`Piped API error: ${res.status}`);
+	const res = await pipedFetch(`/streams/${videoId}`);
 
 	const data = await res.json();
 
@@ -59,9 +75,7 @@ export interface YouTubeSearchResult {
 }
 
 export async function searchYouTube(query: string, limit = 5): Promise<YouTubeSearchResult[]> {
-	const url = `${PIPED_API}/search?q=${encodeURIComponent(query)}&filter=all`;
-	const res = await fetch(url);
-	if (!res.ok) throw new Error(`Piped search error: ${res.status}`);
+	const res = await pipedFetch(`/search?q=${encodeURIComponent(query)}&filter=all`);
 
 	const data = await res.json();
 	const items: {
