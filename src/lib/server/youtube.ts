@@ -1,33 +1,41 @@
-// YouTube InnerTube API — same internal API yt-dlp uses, Android client
-// returns directly playable URLs without signature decryption.
-const INNERTUBE_URL = 'https://www.youtube.com/youtubei/v1';
-const ANDROID_KEY = 'AIzaSyA8eiZmM1FaDVjRy-df2KTyQ_vz_yYM39w';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 
-const ANDROID_CONTEXT = {
-	client: {
-		clientName: 'ANDROID',
-		clientVersion: '19.09.37',
-		androidSdkVersion: 30,
-		hl: 'en',
-		gl: 'US'
+const execFileAsync = promisify(execFile);
+
+// On Infomaniak shared hosting yt-dlp is installed at ~/yt-dlp
+const BINARY_CANDIDATES = [
+	join(process.env.HOME ?? '', 'yt-dlp'),
+	'/usr/local/bin/yt-dlp',
+	'yt-dlp'
+];
+
+function getBinary(): string {
+	for (const p of BINARY_CANDIDATES) {
+		if (existsSync(p)) return p;
 	}
-};
+	return 'yt-dlp'; // fallback, let it fail with a clear error
+}
 
-async function innertubePost(endpoint: string, body: object): Promise<Response> {
-	return fetch(`${INNERTUBE_URL}/${endpoint}?key=${ANDROID_KEY}&prettyPrint=false`, {
-		method: 'POST',
-		headers: {
-			'Content-Type': 'application/json',
-			'User-Agent': 'com.google.android.youtube/19.09.37 (Linux; U; Android 11) gzip'
-		},
-		body: JSON.stringify({ context: ANDROID_CONTEXT, ...body })
-	});
+async function run(args: string[]) {
+	const binary = getBinary();
+	return execFileAsync(binary, args);
 }
 
 export interface AudioStreamInfo {
 	url: string;
 	mimeType: string;
 }
+
+const MIME_MAP: Record<string, string> = {
+	webm: 'audio/webm',
+	m4a: 'audio/mp4',
+	opus: 'audio/ogg',
+	ogg: 'audio/ogg',
+	mp3: 'audio/mpeg'
+};
 
 const audioUrlCache = new Map<string, { info: AudioStreamInfo; expiresAt: number }>();
 const audioUrlPending = new Map<string, Promise<AudioStreamInfo>>();
@@ -50,25 +58,25 @@ export async function getAudioUrl(videoId: string): Promise<AudioStreamInfo> {
 }
 
 async function resolveAudioUrl(videoId: string): Promise<AudioStreamInfo> {
-	const res = await innertubePost('player', { videoId });
-	if (!res.ok) throw new Error(`InnerTube player error: ${res.status}`);
+	const { stdout } = await run([
+		'--no-warnings',
+		'--no-playlist',
+		'-f', 'bestaudio/best',
+		'--get-url',
+		'--print', '%(ext)s',
+		`https://www.youtube.com/watch?v=${videoId}`
+	]);
 
-	const data = await res.json();
+	const lines = stdout.trim().split('\n');
+	const ext = lines[0]?.trim() ?? 'webm';
+	const url = lines[1]?.trim();
 
-	if (data.playabilityStatus?.status !== 'OK') {
-		throw new Error(`Video not playable: ${data.playabilityStatus?.reason ?? 'unknown'}`);
-	}
+	if (!url) throw new Error('yt-dlp returned no audio URL');
 
-	const formats: { url?: string; mimeType: string; bitrate: number }[] = (
-		data.streamingData?.adaptiveFormats ?? []
-	).filter((f: { mimeType: string; url?: string }) => f.mimeType?.startsWith('audio/') && f.url);
-
-	if (!formats.length) throw new Error('No audio streams found');
-
-	const best = formats.sort((a, b) => b.bitrate - a.bitrate)[0];
-	const mimeType = best.mimeType.split(';')[0].trim();
-
-	const info: AudioStreamInfo = { url: best.url!, mimeType };
+	const info: AudioStreamInfo = {
+		url,
+		mimeType: MIME_MAP[ext] ?? 'audio/webm'
+	};
 	audioUrlCache.set(videoId, { info, expiresAt: Date.now() + CACHE_TTL });
 
 	if (audioUrlCache.size > 200) {
@@ -90,29 +98,35 @@ export interface YouTubeSearchResult {
 }
 
 export async function searchYouTube(query: string, limit = 5): Promise<YouTubeSearchResult[]> {
-	const res = await innertubePost('search', { query, params: 'EgIQAQ%3D%3D' }); // filter: video only
-	if (!res.ok) throw new Error(`InnerTube search error: ${res.status}`);
-
-	const data = await res.json();
-
-	const contents =
-		data.contents?.sectionListRenderer?.contents?.[0]?.itemSectionRenderer?.contents ?? [];
+	const { stdout } = await run([
+		'--no-warnings',
+		'--flat-playlist',
+		'--dump-json',
+		`ytsearch${limit}:${query}`
+	]);
 
 	const results: YouTubeSearchResult[] = [];
-	for (const item of contents) {
-		const v = item.videoRenderer;
-		if (!v) continue;
-
-		results.push({
-			videoId: v.videoId,
-			title: v.title?.runs?.[0]?.text ?? 'Unknown',
-			artist: v.ownerText?.runs?.[0]?.text ?? 'Unknown',
-			thumbnail: v.thumbnail?.thumbnails?.at(-1)?.url ?? '',
-			duration: v.lengthText?.simpleText ?? ''
-		});
-
-		if (results.length >= limit) break;
+	for (const line of stdout.trim().split('\n')) {
+		if (!line) continue;
+		try {
+			const item = JSON.parse(line);
+			results.push({
+				videoId: item.id,
+				title: item.title ?? 'Unknown',
+				artist: item.channel ?? item.uploader ?? 'Unknown',
+				thumbnail: item.thumbnails?.[0]?.url ?? '',
+				duration: formatDuration(item.duration)
+			});
+		} catch {
+			continue;
+		}
 	}
-
 	return results;
+}
+
+function formatDuration(seconds: number | null | undefined): string {
+	if (!seconds) return '';
+	const m = Math.floor(seconds / 60);
+	const s = Math.floor(seconds % 60);
+	return `${m}:${s.toString().padStart(2, '0')}`;
 }
