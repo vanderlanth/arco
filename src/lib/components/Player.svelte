@@ -115,6 +115,22 @@
 			navigator.mediaSession.setActionHandler('pause', () => { playerState.isPlaying = false; });
 			navigator.mediaSession.setActionHandler('nexttrack', () => { playerState.skipNext(); });
 			navigator.mediaSession.setActionHandler('previoustrack', () => { handleSkipPrev(); });
+			navigator.mediaSession.setActionHandler('seekto', (d) => {
+				if (audioEl && d.seekTime != null) {
+					audioEl.currentTime = d.seekTime;
+					playerState.setProgress(d.seekTime);
+				}
+			});
+			navigator.mediaSession.setActionHandler('seekforward', (d) => {
+				if (audioEl) {
+					audioEl.currentTime = Math.min(audioEl.duration, audioEl.currentTime + (d.seekOffset ?? 10));
+				}
+			});
+			navigator.mediaSession.setActionHandler('seekbackward', (d) => {
+				if (audioEl) {
+					audioEl.currentTime = Math.max(0, audioEl.currentTime - (d.seekOffset ?? 10));
+				}
+			});
 		}
 
 		trackChanging = true;
@@ -145,11 +161,27 @@
 
 
 	function handleTimeUpdate() {
-		if (audioEl) playerState.setProgress(audioEl.currentTime);
+		if (!audioEl) return;
+		playerState.setProgress(audioEl.currentTime);
+		if ('mediaSession' in navigator && audioEl.duration) {
+			navigator.mediaSession.setPositionState({
+				duration: audioEl.duration,
+				playbackRate: audioEl.playbackRate,
+				position: audioEl.currentTime
+			});
+		}
 	}
 
 	function handleLoadedMetadata() {
-		if (audioEl) playerState.setDuration(audioEl.duration);
+		if (!audioEl) return;
+		playerState.setDuration(audioEl.duration);
+		if ('mediaSession' in navigator && audioEl.duration) {
+			navigator.mediaSession.setPositionState({
+				duration: audioEl.duration,
+				playbackRate: 1,
+				position: audioEl.currentTime
+			});
+		}
 	}
 
 	function handleCanPlay() {
