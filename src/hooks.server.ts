@@ -1,8 +1,7 @@
 import { redirect } from '@sveltejs/kit';
 import type { Handle } from '@sveltejs/kit';
 import { createHmac } from 'node:crypto';
-
-const APP_SECRET = process.env.APP_SECRET!;
+import { APP_SECRET } from '$env/static/private';
 import { dev } from '$app/environment';
 import { generateCsrfToken } from '$lib/csrf';
 

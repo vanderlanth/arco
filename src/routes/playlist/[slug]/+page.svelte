@@ -22,11 +22,14 @@
 	let ytResults = $state<YouTubeSearchResult[]>([]);
 	let ytLoading = $state(false);
 	let showYtSearch = $state(false);
-	let confirmDelete = $state(false);
+	let showDeleteModal = $state(false);
+	let deleteConfirmName = $state('');
 	let deleting = $state(false);
 
+	const canDelete = $derived(deleteConfirmName.trim() === data.playlist.name);
+
 	async function deletePlaylist() {
-		if (deleting) return;
+		if (deleting || !canDelete) return;
 		deleting = true;
 		try {
 			const res = await fetch(`/api/playlists/${data.playlist.id}`, { method: 'DELETE' });
@@ -34,8 +37,14 @@
 			goto('/');
 		} finally {
 			deleting = false;
-			confirmDelete = false;
+			showDeleteModal = false;
+			deleteConfirmName = '';
 		}
+	}
+
+	function openDeleteModal() {
+		deleteConfirmName = '';
+		showDeleteModal = true;
 	}
 
 	const fuse = $derived(
@@ -113,32 +122,13 @@
 					{localTracks.length} track{localTracks.length !== 1 ? 's' : ''}
 				</p>
 			</div>
-			{#if confirmDelete}
-				<div class="flex items-center gap-2">
-					<span class="text-xs text-text-muted">Delete this playlist?</span>
-					<button
-						onclick={deletePlaylist}
-						disabled={deleting}
-						class="rounded-md bg-red-500/90 px-3 py-1 text-xs font-medium text-white hover:bg-red-600 transition-colors disabled:opacity-50"
-					>
-						{deleting ? 'Deleting...' : 'Confirm'}
-					</button>
-					<button
-						onclick={() => (confirmDelete = false)}
-						class="rounded-md px-2 py-1 text-xs text-text-muted hover:text-text-secondary transition-colors"
-					>
-						Cancel
-					</button>
-				</div>
-			{:else}
-				<button
-					onclick={() => (confirmDelete = true)}
-					class="rounded-lg border border-border p-2 text-text-muted hover:text-red-400 hover:border-red-400/30 transition-colors"
-					title="Delete playlist"
-				>
-					<Icon name="trash" size={16} />
-				</button>
-			{/if}
+			<button
+				onclick={openDeleteModal}
+				class="rounded-lg border border-border p-2 text-text-muted hover:text-red-400 hover:border-red-400/30 transition-colors"
+				title="Delete playlist"
+			>
+				<Icon name="trash" size={16} />
+			</button>
 		</div>
 	</header>
 
@@ -154,13 +144,13 @@
 		</div>
 
 		<div class="mb-3 flex items-center justify-between">
-			<p class="text-xs text-text-muted">
-				{#if query}
+			{#if query}
+				<p class="text-xs text-text-muted">
 					{filteredTracks.length} result{filteredTracks.length !== 1 ? 's' : ''}
-				{:else}
-					{localTracks.length} track{localTracks.length !== 1 ? 's' : ''}
-				{/if}
-			</p>
+				</p>
+			{:else}
+				<span></span>
+			{/if}
 
 			{#if query && filteredTracks.length < 3}
 				<button
@@ -181,6 +171,40 @@
 	{:else}
 		<div class="py-20 text-center">
 			<p class="text-sm text-text-muted">This playlist is empty.</p>
+		</div>
+	{/if}
+
+	{#if showDeleteModal}
+		<div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+			<div class="absolute inset-0 bg-black/60" onclick={() => { showDeleteModal = false; deleteConfirmName = ''; }}></div>
+			<div class="relative w-full max-w-sm rounded-xl border border-border bg-surface-raised p-6 shadow-2xl">
+				<h2 class="mb-1 text-base font-semibold text-text-primary">Delete playlist</h2>
+				<p class="mb-4 text-sm text-text-muted">
+					This action cannot be undone. Type <span class="font-medium text-text-secondary">{data.playlist.name}</span> to confirm.
+				</p>
+				<input
+					bind:value={deleteConfirmName}
+					placeholder={data.playlist.name}
+					class="mb-4 w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-text-primary placeholder-text-muted outline-none focus:border-red-400/60"
+					autofocus
+					onkeydown={(e) => { if (e.key === 'Enter' && canDelete) deletePlaylist(); if (e.key === 'Escape') { showDeleteModal = false; deleteConfirmName = ''; } }}
+				/>
+				<div class="flex justify-end gap-2">
+					<button
+						onclick={() => { showDeleteModal = false; deleteConfirmName = ''; }}
+						class="rounded-md px-3 py-1.5 text-sm text-text-muted hover:text-text-secondary transition-colors"
+					>
+						Cancel
+					</button>
+					<button
+						onclick={deletePlaylist}
+						disabled={!canDelete || deleting}
+						class="rounded-md bg-red-500/90 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-600 transition-colors disabled:opacity-40"
+					>
+						{deleting ? 'Deleting...' : 'Delete'}
+					</button>
+				</div>
+			</div>
 		</div>
 	{/if}
 

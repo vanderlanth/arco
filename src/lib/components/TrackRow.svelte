@@ -115,7 +115,7 @@
 	<div class="relative">
 		<button
 			onclick={() => { showMenu = !showMenu; showPlaylistSub = false; }}
-			class="rounded p-1.5 text-text-muted opacity-0 transition-opacity hover:bg-surface-raised hover:text-text-primary group-hover:opacity-100"
+			class="rounded p-1.5 text-text-muted transition-colors hover:bg-surface-raised hover:text-text-primary"
 			aria-label="Track options"
 		>
 			<Icon name="overflow-menu" size={16} />

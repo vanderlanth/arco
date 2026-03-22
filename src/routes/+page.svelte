@@ -11,6 +11,7 @@
 	let showNewForm = $state(false);
 	let newName = $state('');
 	let creating = $state(false);
+	let showMoreMenu = $state(false);
 
 	async function createPlaylist() {
 		const name = newName.trim();
@@ -52,7 +53,10 @@
 
 <main class="mx-auto max-w-2xl px-4 py-6">
 	<header class="mb-6 flex items-center justify-between">
-		<h1 class="text-2xl font-bold text-text-primary">Arco</h1>
+		<div class="flex items-center gap-2">
+			<img src="/favicon.svg" alt="" class="h-7 w-7" />
+			<h1 class="text-2xl font-bold text-text-primary">Arco</h1>
+		</div>
 		<div class="flex items-center gap-3">
 			<button
 				onclick={() => (showNewForm = !showNewForm)}
@@ -60,30 +64,25 @@
 			>
 				New playlist
 			</button>
-			<a
-				href="/add"
-				class="rounded-lg border border-border px-3 py-1.5 text-xs text-text-secondary hover:bg-surface-overlay transition-colors"
-			>
-				Add song
-			</a>
-			<a
-				href="/import"
-				class="rounded-lg border border-border px-3 py-1.5 text-xs text-text-secondary hover:bg-surface-overlay transition-colors"
-			>
-				Import
-			</a>
-			<a
-				href="/setup-2fa"
-				class="rounded-lg border border-border px-3 py-1.5 text-xs text-text-secondary hover:bg-surface-overlay transition-colors"
-			>
-				2FA
-			</a>
-			<a
-				href="/logout"
-				class="rounded-lg border border-border px-3 py-1.5 text-xs text-text-secondary hover:bg-surface-overlay transition-colors"
-			>
-				Logout
-			</a>
+			<div class="relative">
+				<button
+					onclick={() => (showMoreMenu = !showMoreMenu)}
+					class="rounded-lg border border-border p-1.5 text-text-secondary hover:bg-surface-overlay transition-colors"
+					aria-label="More actions"
+				>
+					<Icon name="overflow-menu" size={16} />
+				</button>
+				{#if showMoreMenu}
+					<div class="absolute right-0 top-full z-30 mt-1 w-40 rounded-lg border border-border bg-surface-raised py-1 shadow-xl">
+						<a href="/add" onclick={() => (showMoreMenu = false)} class="block px-3 py-2 text-sm text-text-primary hover:bg-surface-overlay">Add song</a>
+						<a href="/import" onclick={() => (showMoreMenu = false)} class="block px-3 py-2 text-sm text-text-primary hover:bg-surface-overlay">Import</a>
+						<a href="/setup-2fa" onclick={() => (showMoreMenu = false)} class="block px-3 py-2 text-sm text-text-primary hover:bg-surface-overlay">2FA</a>
+						<div class="my-1 border-t border-border"></div>
+						<a href="/logout" class="block px-3 py-2 text-sm text-red-400 hover:bg-surface-overlay">Logout</a>
+					</div>
+					<button onclick={() => (showMoreMenu = false)} class="fixed inset-0 z-20" aria-label="Close menu"></button>
+				{/if}
+			</div>
 		</div>
 	</header>
 
