@@ -61,6 +61,12 @@
 				New playlist
 			</button>
 			<a
+				href="/add"
+				class="rounded-lg border border-border px-3 py-1.5 text-xs text-text-secondary hover:bg-surface-overlay transition-colors"
+			>
+				Add song
+			</a>
+			<a
 				href="/import"
 				class="rounded-lg border border-border px-3 py-1.5 text-xs text-text-secondary hover:bg-surface-overlay transition-colors"
 			>

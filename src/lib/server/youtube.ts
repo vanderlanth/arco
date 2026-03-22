@@ -89,6 +89,31 @@ async function resolveAudioUrl(videoId: string): Promise<AudioStreamInfo> {
 	return info;
 }
 
+export interface VideoMetadata {
+	videoId: string;
+	title: string;
+	artist: string;
+	albumArt: string;
+	durationMs: number | null;
+}
+
+export async function getVideoMetadata(videoId: string): Promise<VideoMetadata> {
+	const { stdout } = await run([
+		'--no-warnings',
+		'--no-playlist',
+		'--dump-json',
+		`https://www.youtube.com/watch?v=${videoId}`
+	]);
+	const item = JSON.parse(stdout.trim());
+	return {
+		videoId,
+		title: item.title ?? 'Unknown',
+		artist: item.channel ?? item.uploader ?? 'Unknown',
+		albumArt: item.thumbnail ?? item.thumbnails?.[0]?.url ?? '',
+		durationMs: item.duration ? Math.round(item.duration * 1000) : null
+	};
+}
+
 export interface YouTubeSearchResult {
 	videoId: string;
 	title: string;

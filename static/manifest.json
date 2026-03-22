@@ -6,6 +6,15 @@
 	"display": "standalone",
 	"background_color": "#0f0f0f",
 	"theme_color": "#0f0f0f",
+	"share_target": {
+		"action": "/add",
+		"method": "GET",
+		"params": {
+			"url": "url",
+			"text": "text",
+			"title": "title"
+		}
+	},
 	"icons": [
 		{
 			"src": "/icon-192.png",
