@@ -100,6 +100,22 @@
 
 		lastTrackQueueId = queueId;
 
+		// Set media session metadata before play() so the OS shows rich controls immediately
+		if ('mediaSession' in navigator) {
+			navigator.mediaSession.metadata = new MediaMetadata({
+				title: current.title,
+				artist: current.artist,
+				album: current.album ?? undefined,
+				artwork: current.albumArt
+					? [{ src: current.albumArt, sizes: '512x512', type: 'image/jpeg' }]
+					: undefined
+			});
+			navigator.mediaSession.setActionHandler('play', () => { playerState.isPlaying = true; });
+			navigator.mediaSession.setActionHandler('pause', () => { playerState.isPlaying = false; });
+			navigator.mediaSession.setActionHandler('nexttrack', () => { playerState.skipNext(); });
+			navigator.mediaSession.setActionHandler('previoustrack', () => { handleSkipPrev(); });
+		}
+
 		const key = preloadKey(current);
 		const blobUrl = consumePreload(key);
 		audioEl.src = blobUrl ?? url;
@@ -125,34 +141,6 @@
 		}
 	});
 
-	$effect(() => {
-		if (!playerState.currentTrack) return;
-		if (!('mediaSession' in navigator)) return;
-
-		const track = playerState.currentTrack;
-
-		navigator.mediaSession.metadata = new MediaMetadata({
-			title: track.title,
-			artist: track.artist,
-			album: track.album ?? undefined,
-			artwork: track.albumArt
-				? [{ src: track.albumArt, sizes: '512x512', type: 'image/jpeg' }]
-				: undefined
-		});
-
-		navigator.mediaSession.setActionHandler('play', () => {
-			playerState.isPlaying = true;
-		});
-		navigator.mediaSession.setActionHandler('pause', () => {
-			playerState.isPlaying = false;
-		});
-		navigator.mediaSession.setActionHandler('nexttrack', () => {
-			playerState.skipNext();
-		});
-		navigator.mediaSession.setActionHandler('previoustrack', () => {
-			handleSkipPrev();
-		});
-	});
 
 	function handleTimeUpdate() {
 		if (audioEl) playerState.setProgress(audioEl.currentTime);
