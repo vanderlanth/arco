@@ -157,6 +157,9 @@
 		} else {
 			audioEl.pause();
 		}
+		if ('mediaSession' in navigator) {
+			navigator.mediaSession.playbackState = playerState.isPlaying ? 'playing' : 'paused';
+		}
 	});
 
 
@@ -194,16 +197,11 @@
 
 	function handlePlaying() {
 		trackChanging = false;
-		if ('mediaSession' in navigator) {
-			navigator.mediaSession.playbackState = 'playing';
-		}
 	}
 
 	function handlePause() {
-		if (trackChanging) return;
-		if ('mediaSession' in navigator) {
-			navigator.mediaSession.playbackState = 'paused';
-		}
+		// Intentionally empty — mediaSession.playbackState is driven by playerState.isPlaying,
+		// not by raw audio element events, to survive Android audio focus interruptions on lock.
 	}
 
 	function handleAudioError() {
