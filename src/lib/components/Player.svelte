@@ -158,23 +158,16 @@
 
 	function handlePlaying() {
 		trackChanging = false;
-		if (pauseTimer) { clearTimeout(pauseTimer); pauseTimer = null; }
 		if ('mediaSession' in navigator) {
 			navigator.mediaSession.playbackState = 'playing';
 		}
 	}
 
-	let pauseTimer: ReturnType<typeof setTimeout> | null = null;
-
 	function handlePause() {
 		if (trackChanging) return;
-		// Delay reporting pause to mediaSession — Android briefly pauses audio on screen
-		// lock which would otherwise dismiss the lock screen widget immediately.
-		pauseTimer = setTimeout(() => {
-			if (!playerState.isPlaying && 'mediaSession' in navigator) {
-				navigator.mediaSession.playbackState = 'paused';
-			}
-		}, 500);
+		if ('mediaSession' in navigator) {
+			navigator.mediaSession.playbackState = 'paused';
+		}
 	}
 
 	function handleAudioError() {
