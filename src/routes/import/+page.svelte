@@ -97,7 +97,7 @@
 </script>
 
 <svelte:head>
-	<title>Import — Bridge</title>
+	<title>Import — Arco</title>
 </svelte:head>
 
 <main class="mx-auto max-w-lg px-4 py-12">

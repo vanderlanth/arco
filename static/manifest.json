@@ -1,6 +1,6 @@
 {
-	"name": "Bridge",
-	"short_name": "Bridge",
+	"name": "Arco",
+	"short_name": "Arco",
 	"description": "Personal music library backed by YouTube",
 	"start_url": "/",
 	"display": "standalone",

@@ -22,7 +22,7 @@ export const load: PageServerLoad = async ({ cookies }) => {
 	const otpauth = speakeasy.otpauthURL({
 		secret,
 		label: 'me',
-		issuer: 'Bridge',
+		issuer: 'Arco',
 		encoding: 'base32'
 	});
 	const qrDataUrl = await QRCode.toDataURL(otpauth, { width: 200 });

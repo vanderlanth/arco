@@ -7,7 +7,7 @@ import { build, files, version } from '$service-worker';
 
 const sw = self as unknown as ServiceWorkerGlobalScope;
 
-const CACHE_NAME = `bridge-${version}`;
+const CACHE_NAME = `arco-${version}`;
 
 const ASSETS = [...build, ...files];
 

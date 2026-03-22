@@ -10,7 +10,7 @@
 </script>
 
 <svelte:head>
-	<title>Two-factor auth — Bridge</title>
+	<title>Two-factor auth — Arco</title>
 </svelte:head>
 
 <main class="flex min-h-screen items-center justify-center p-4">

@@ -87,12 +87,12 @@
 </script>
 
 <svelte:head>
-	<title>Add song — Bridge</title>
+	<title>Add song — Arco</title>
 </svelte:head>
 
 <main class="mx-auto max-w-md px-4 py-8">
 	<header class="mb-6 flex items-center justify-between">
-		<a href="/" class="text-sm text-text-muted hover:text-text-secondary transition-colors">← Bridge</a>
+		<a href="/" class="text-sm text-text-muted hover:text-text-secondary transition-colors">← Arco</a>
 		<h1 class="text-base font-semibold text-text-primary">Add song</h1>
 		<div class="w-12"></div>
 	</header>
@@ -140,7 +140,7 @@
 						class="inline-block rounded-md border border-accent/50 bg-accent/10 px-3 py-1.5 text-xs text-accent"
 						onclick={(e) => e.preventDefault()}
 					>
-						+ Add to Bridge
+						+ Add to Arco
 					</a>
 				</div>
 			{/if}
@@ -206,7 +206,7 @@
 				class="inline-block rounded-md border border-accent/50 bg-accent/10 px-3 py-1.5 text-xs text-accent"
 				onclick={(e) => e.preventDefault()}
 			>
-				+ Add to Bridge
+				+ Add to Arco
 			</a>
 		</div>
 	{/if}

@@ -3,7 +3,6 @@
 	import type { Snippet } from 'svelte';
 	import type { LayoutData } from './$types';
 	import Player from '$lib/components/Player.svelte';
-
 	let { data, children }: { data: LayoutData; children: Snippet } = $props();
 </script>
 

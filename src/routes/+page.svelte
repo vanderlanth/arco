@@ -47,12 +47,12 @@
 </script>
 
 <svelte:head>
-	<title>Bridge</title>
+	<title>Arco</title>
 </svelte:head>
 
 <main class="mx-auto max-w-2xl px-4 py-6">
 	<header class="mb-6 flex items-center justify-between">
-		<h1 class="text-2xl font-bold text-text-primary">Bridge</h1>
+		<h1 class="text-2xl font-bold text-text-primary">Arco</h1>
 		<div class="flex items-center gap-3">
 			<button
 				onclick={() => (showNewForm = !showNewForm)}

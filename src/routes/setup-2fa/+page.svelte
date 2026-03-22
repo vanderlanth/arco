@@ -15,7 +15,7 @@
 </script>
 
 <svelte:head>
-	<title>Set up 2FA — Bridge</title>
+	<title>Set up 2FA — Arco</title>
 </svelte:head>
 
 <main class="flex min-h-screen items-center justify-center p-4">

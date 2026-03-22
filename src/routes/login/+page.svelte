@@ -5,7 +5,7 @@
 </script>
 
 <svelte:head>
-	<title>Sign in — Bridge</title>
+	<title>Sign in — Arco</title>
 </svelte:head>
 
 <main class="flex min-h-screen items-center justify-center p-4">
