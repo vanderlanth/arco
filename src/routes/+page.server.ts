@@ -9,10 +9,12 @@ export const load: PageServerLoad = async () => {
 			id: playlists.id,
 			name: playlists.name,
 			slug: playlists.slug,
-			trackCount: sql<number>`(SELECT count(*) FROM playlist_tracks WHERE playlist_id = ${playlists.id})`.as('track_count'),
+			trackCount: sql<number>`count(${playlistTracks.id})`,
 			createdAt: playlists.createdAt
 		})
 		.from(playlists)
+		.leftJoin(playlistTracks, eq(playlistTracks.playlistId, playlists.id))
+		.groupBy(playlists.id)
 		.orderBy(desc(playlists.createdAt));
 	return { playlists: allPlaylists };
 };
