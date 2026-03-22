@@ -1,20 +1,23 @@
-const PIPED_INSTANCES = [
-	'https://pipedapi.kavin.rocks',
-	'https://piped-api.garudalinux.org',
-	'https://api.piped.yt',
-	'https://piped.tokhmi.xyz'
+const INVIDIOUS_INSTANCES = [
+	'https://inv.riverside.rocks',
+	'https://yt.artemislena.eu',
+	'https://invidious.nerdvpn.de',
+	'https://invidious.privacydev.net',
+	'https://iv.ggtyler.dev'
 ];
 
-async function pipedFetch(path: string): Promise<Response> {
-	for (const base of PIPED_INSTANCES) {
+async function invidiousFetch(path: string): Promise<Response> {
+	for (const base of INVIDIOUS_INSTANCES) {
 		try {
-			const res = await fetch(`${base}${path}`);
+			const res = await fetch(`${base}${path}`, {
+				headers: { 'User-Agent': 'Mozilla/5.0' }
+			});
 			if (res.ok) return res;
 		} catch {
 			// try next instance
 		}
 	}
-	throw new Error('All Piped instances failed');
+	throw new Error('All Invidious instances failed');
 }
 
 export interface AudioStreamInfo {
@@ -43,17 +46,20 @@ export async function getAudioUrl(videoId: string): Promise<AudioStreamInfo> {
 }
 
 async function resolveAudioUrl(videoId: string): Promise<AudioStreamInfo> {
-	const res = await pipedFetch(`/streams/${videoId}`);
-
+	const res = await invidiousFetch(`/api/v1/videos/${videoId}?fields=adaptiveFormats`);
 	const data = await res.json();
 
-	const streams: { url: string; mimeType: string; bitrate: number }[] = data.audioStreams ?? [];
-	if (!streams.length) throw new Error('No audio streams returned by Piped');
+	const formats: { url: string; type: string; bitrate: number; audioQuality?: string }[] =
+		(data.adaptiveFormats ?? []).filter(
+			(f: { type: string }) => f.type?.startsWith('audio/')
+		);
 
-	// Pick highest bitrate stream
-	const best = streams.sort((a, b) => b.bitrate - a.bitrate)[0];
+	if (!formats.length) throw new Error('No audio formats returned by Invidious');
 
-	const info: AudioStreamInfo = { url: best.url, mimeType: best.mimeType };
+	const best = formats.sort((a, b) => b.bitrate - a.bitrate)[0];
+	const mimeType = best.type.split(';')[0].trim();
+
+	const info: AudioStreamInfo = { url: best.url, mimeType };
 	audioUrlCache.set(videoId, { info, expiresAt: Date.now() + CACHE_TTL });
 
 	if (audioUrlCache.size > 200) {
@@ -75,28 +81,24 @@ export interface YouTubeSearchResult {
 }
 
 export async function searchYouTube(query: string, limit = 5): Promise<YouTubeSearchResult[]> {
-	const res = await pipedFetch(`/search?q=${encodeURIComponent(query)}&filter=all`);
-
-	const data = await res.json();
+	const res = await invidiousFetch(
+		`/api/v1/search?q=${encodeURIComponent(query)}&type=video&fields=videoId,title,author,videoThumbnails,lengthSeconds`
+	);
 	const items: {
-		url: string;
+		videoId: string;
 		title: string;
-		uploaderName: string;
-		thumbnail: string;
-		duration: number;
-		type: string;
-	}[] = data.items ?? [];
+		author: string;
+		videoThumbnails: { url: string; quality: string }[];
+		lengthSeconds: number;
+	}[] = await res.json();
 
-	return items
-		.filter((item) => item.type === 'stream')
-		.slice(0, limit)
-		.map((item) => ({
-			videoId: item.url.replace('/watch?v=', ''),
-			title: item.title ?? 'Unknown',
-			artist: item.uploaderName ?? 'Unknown',
-			thumbnail: item.thumbnail ?? '',
-			duration: formatDuration(item.duration)
-		}));
+	return items.slice(0, limit).map((item) => ({
+		videoId: item.videoId,
+		title: item.title ?? 'Unknown',
+		artist: item.author ?? 'Unknown',
+		thumbnail: item.videoThumbnails?.find((t) => t.quality === 'medium')?.url ?? item.videoThumbnails?.[0]?.url ?? '',
+		duration: formatDuration(item.lengthSeconds)
+	}));
 }
 
 function formatDuration(seconds: number | null | undefined): string {
