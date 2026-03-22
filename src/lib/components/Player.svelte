@@ -89,6 +89,7 @@
 
 	// --- Main audio source management ---
 	let lastTrackQueueId = '';
+	let trackChanging = false;
 
 	$effect(() => {
 		if (!audioEl) return;
@@ -116,6 +117,7 @@
 			navigator.mediaSession.setActionHandler('previoustrack', () => { handleSkipPrev(); });
 		}
 
+		trackChanging = true;
 		const key = preloadKey(current);
 		const blobUrl = consumePreload(key);
 		audioEl.src = blobUrl ?? url;
@@ -155,12 +157,14 @@
 	}
 
 	function handlePlaying() {
+		trackChanging = false;
 		if ('mediaSession' in navigator) {
 			navigator.mediaSession.playbackState = 'playing';
 		}
 	}
 
 	function handlePause() {
+		if (trackChanging) return;
 		if ('mediaSession' in navigator) {
 			navigator.mediaSession.playbackState = 'paused';
 		}
