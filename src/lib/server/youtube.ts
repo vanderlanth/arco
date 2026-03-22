@@ -1,17 +1,8 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { existsSync, chmodSync, createWriteStream, writeFileSync } from 'node:fs';
+import { existsSync, chmodSync, createWriteStream } from 'node:fs';
 import { pipeline } from 'node:stream/promises';
 import { join } from 'node:path';
-
-const COOKIES_PATH = '/tmp/yt-cookies.txt';
-
-function getCookieArgs(): string[] {
-	const cookies = process.env.YT_COOKIES;
-	if (!cookies) return [];
-	if (!existsSync(COOKIES_PATH)) writeFileSync(COOKIES_PATH, cookies, 'utf8');
-	return ['--cookies', COOKIES_PATH];
-}
 
 const execFileAsync = promisify(execFile);
 
@@ -101,8 +92,7 @@ async function resolveAudioUrl(videoId: string): Promise<AudioStreamInfo> {
 		'--no-warnings',
 		'--no-playlist',
 		'-f', 'bestaudio/best',
-		'--extractor-args', 'youtube:player_client=ios,android',
-		...getCookieArgs(),
+		'--extractor-args', 'youtube:player_client=tv_embedded,tv,ios',
 		'--get-url',
 		'--print', '%(ext)s',
 		`https://www.youtube.com/watch?v=${videoId}`
