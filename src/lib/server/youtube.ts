@@ -100,8 +100,8 @@ async function resolveAudioUrl(videoId: string): Promise<AudioStreamInfo> {
 	const { stdout } = await run([
 		'--no-warnings',
 		'--no-playlist',
-		'-f', 'bestaudio[ext=m4a]/bestaudio',
-		'--extractor-args', 'youtube:player_client=ios,web',
+		'-f', 'bestaudio/best',
+		'--extractor-args', 'youtube:player_client=ios,android',
 		...getCookieArgs(),
 		'--get-url',
 		'--print', '%(ext)s',
