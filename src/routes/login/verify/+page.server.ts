@@ -1,7 +1,9 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
-import { APP_SECRET, TOTP_SECRET } from '$env/dynamic/private';
 import { dev } from '$app/environment';
+
+const APP_SECRET = process.env.APP_SECRET!;
+const TOTP_SECRET = process.env.TOTP_SECRET;
 import { createHmac } from 'node:crypto';
 import speakeasy from 'speakeasy';
 import { makeSessionSig, sessionCookieOptions } from '../../../hooks.server';

@@ -1,10 +1,8 @@
-import {
-	SPOTIFY_CLIENT_ID,
-	SPOTIFY_CLIENT_SECRET,
-	SPOTIFY_REDIRECT_URI
-} from '$env/dynamic/private';
-
 const SCOPES = 'user-library-read';
+
+const SPOTIFY_CLIENT_ID = process.env.SPOTIFY_CLIENT_ID!;
+const SPOTIFY_CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET!;
+const SPOTIFY_REDIRECT_URI = process.env.SPOTIFY_REDIRECT_URI!;
 
 export function getSpotifyAuthUrl(state: string): string {
 	const params = new URLSearchParams({
