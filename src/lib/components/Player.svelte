@@ -88,6 +88,26 @@
 	});
 
 
+	// --- Re-assert media session on screen lock (visibilitychange) ---
+	function reassertMediaSession() {
+		if (!('mediaSession' in navigator) || !playerState.currentTrack || !playerState.isPlaying) return;
+		const track = playerState.currentTrack;
+		navigator.mediaSession.metadata = new MediaMetadata({
+			title: track.title,
+			artist: track.artist,
+			album: track.album ?? undefined,
+			artwork: track.albumArt
+				? [{ src: track.albumArt, sizes: '512x512', type: 'image/jpeg' }]
+				: undefined
+		});
+		navigator.mediaSession.playbackState = 'playing';
+	}
+
+	$effect(() => {
+		document.addEventListener('visibilitychange', reassertMediaSession);
+		return () => document.removeEventListener('visibilitychange', reassertMediaSession);
+	});
+
 	// --- Main audio source management ---
 	let lastTrackQueueId = '';
 	let trackChanging = false;
@@ -204,12 +224,8 @@
 	}
 
 	function handlePause() {
-		if (trackChanging) return;
-		// If the user wants audio playing but audio was paused (e.g. Android audio focus loss
-		// on screen lock), immediately reclaim playback.
-		if (playerState.isPlaying && audioEl) {
-			audioEl.play().catch(() => {});
-		}
+		// Intentionally empty — mediaSession.playbackState is driven by playerState.isPlaying,
+		// not by raw audio element events, to survive Android audio focus interruptions on lock.
 	}
 
 	function handleAudioError() {
