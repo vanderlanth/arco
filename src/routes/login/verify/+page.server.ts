@@ -1,6 +1,6 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
-import { APP_SECRET, TOTP_SECRET } from '$env/static/private';
+import { APP_SECRET, TOTP_SECRET } from '$env/dynamic/private';
 import { dev } from '$app/environment';
 import { createHmac } from 'node:crypto';
 import speakeasy from 'speakeasy';

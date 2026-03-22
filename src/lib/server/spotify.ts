@@ -2,7 +2,7 @@ import {
 	SPOTIFY_CLIENT_ID,
 	SPOTIFY_CLIENT_SECRET,
 	SPOTIFY_REDIRECT_URI
-} from '$env/static/private';
+} from '$env/dynamic/private';
 
 const SCOPES = 'user-library-read';
 

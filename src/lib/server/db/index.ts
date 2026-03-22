@@ -1,6 +1,6 @@
 import { drizzle } from 'drizzle-orm/libsql';
 import { createClient } from '@libsql/client';
-import { TURSO_URL, TURSO_AUTH_TOKEN } from '$env/static/private';
+import { TURSO_URL, TURSO_AUTH_TOKEN } from '$env/dynamic/private';
 import * as schema from './schema';
 
 const client = createClient({
