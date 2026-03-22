@@ -1,7 +1,7 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { extractSpotifyTrackId, fetchSpotifyMetadata } from '$lib/server/spotify';
-import { getVideoMetadata } from '$lib/server/youtube';
+import { extractSpotifyTrackId, fetchSpotifyTitle } from '$lib/server/spotify';
+import { getVideoMetadata, searchYouTube } from '$lib/server/youtube';
 
 function extractYouTubeVideoId(input: string): string | null {
 	try {
@@ -21,12 +21,23 @@ export const GET: RequestHandler = async ({ url }) => {
 	const spotifyId = extractSpotifyTrackId(rawUrl);
 	if (spotifyId) {
 		try {
-			const meta = await fetchSpotifyMetadata(spotifyId);
-			return json({ type: 'spotify', ...meta });
+			const title = await fetchSpotifyTitle(spotifyId);
+			const results = await searchYouTube(title, 1);
+			if (results.length === 0) throw new Error('No YouTube match found');
+			const top = results[0];
+			return json({
+				type: 'youtube',
+				spotifyId,
+				videoId: top.videoId,
+				title: top.title,
+				artist: top.artist,
+				albumArt: top.thumbnail,
+				durationMs: null
+			});
 		} catch (e) {
 			const msg = e instanceof Error ? e.message : String(e);
-			console.error('[resolve-url] Spotify fetch failed:', msg);
-			throw error(502, `Spotify error: ${msg}`);
+			console.error('[resolve-url] Spotify→YouTube failed:', msg);
+			throw error(502, `Could not resolve track: ${msg}`);
 		}
 	}
 
