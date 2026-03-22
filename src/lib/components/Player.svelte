@@ -115,22 +115,22 @@
 			navigator.mediaSession.setActionHandler('pause', () => { playerState.isPlaying = false; });
 			navigator.mediaSession.setActionHandler('nexttrack', () => { playerState.skipNext(); });
 			navigator.mediaSession.setActionHandler('previoustrack', () => { handleSkipPrev(); });
-			navigator.mediaSession.setActionHandler('seekto', (d) => {
-				if (audioEl && d.seekTime != null) {
-					audioEl.currentTime = d.seekTime;
-					playerState.setProgress(d.seekTime);
-				}
-			});
-			navigator.mediaSession.setActionHandler('seekforward', (d) => {
-				if (audioEl) {
-					audioEl.currentTime = Math.min(audioEl.duration, audioEl.currentTime + (d.seekOffset ?? 10));
-				}
-			});
-			navigator.mediaSession.setActionHandler('seekbackward', (d) => {
-				if (audioEl) {
-					audioEl.currentTime = Math.max(0, audioEl.currentTime - (d.seekOffset ?? 10));
-				}
-			});
+			try {
+				navigator.mediaSession.setActionHandler('seekto', (d) => {
+					if (audioEl && d.seekTime != null) {
+						audioEl.currentTime = d.seekTime;
+						playerState.setProgress(d.seekTime);
+					}
+				});
+				navigator.mediaSession.setActionHandler('seekforward', (d) => {
+					if (audioEl) audioEl.currentTime = Math.min(audioEl.duration, audioEl.currentTime + (d.seekOffset ?? 10));
+				});
+				navigator.mediaSession.setActionHandler('seekbackward', (d) => {
+					if (audioEl) audioEl.currentTime = Math.max(0, audioEl.currentTime - (d.seekOffset ?? 10));
+				});
+			} catch {
+				// seek handlers not supported in this browser
+			}
 		}
 
 		trackChanging = true;
@@ -163,25 +163,29 @@
 	function handleTimeUpdate() {
 		if (!audioEl) return;
 		playerState.setProgress(audioEl.currentTime);
-		if ('mediaSession' in navigator && audioEl.duration) {
+		updatePositionState();
+	}
+
+	function updatePositionState() {
+		if (!audioEl || !('mediaSession' in navigator)) return;
+		const duration = audioEl.duration;
+		if (!duration || !isFinite(duration) || duration <= 0) return;
+		const position = Math.min(audioEl.currentTime, duration);
+		try {
 			navigator.mediaSession.setPositionState({
-				duration: audioEl.duration,
-				playbackRate: audioEl.playbackRate,
-				position: audioEl.currentTime
+				duration,
+				playbackRate: audioEl.playbackRate || 1,
+				position
 			});
+		} catch {
+			// ignore — some browsers reject setPositionState in certain states
 		}
 	}
 
 	function handleLoadedMetadata() {
 		if (!audioEl) return;
 		playerState.setDuration(audioEl.duration);
-		if ('mediaSession' in navigator && audioEl.duration) {
-			navigator.mediaSession.setPositionState({
-				duration: audioEl.duration,
-				playbackRate: 1,
-				position: audioEl.currentTime
-			});
-		}
+		updatePositionState();
 	}
 
 	function handleCanPlay() {
