@@ -164,10 +164,8 @@
 	}
 
 	function handlePause() {
-		if (trackChanging) return;
-		if ('mediaSession' in navigator) {
-			navigator.mediaSession.playbackState = 'paused';
-		}
+		// Do not update mediaSession here — Android briefly pauses audio on screen lock,
+		// which would dismiss the lock screen widget. The OS detects pause state on its own.
 	}
 
 	function handleAudioError() {
