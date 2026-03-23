@@ -25,6 +25,25 @@ export const tracks = sqliteTable(
 	(table) => [uniqueIndex('spotify_playlist_uniq').on(table.spotifyId, table.playlistId)]
 );
 
+export const radios = sqliteTable('radios', {
+	id: integer('id').primaryKey({ autoIncrement: true }),
+	seedTitle: text('seed_title').notNull(),
+	seedArtist: text('seed_artist').notNull(),
+	seedAlbumArt: text('seed_album_art'),
+	createdAt: text('created_at').notNull()
+});
+
+export const radioTracks = sqliteTable('radio_tracks', {
+	id: integer('id').primaryKey({ autoIncrement: true }),
+	radioId: integer('radio_id')
+		.notNull()
+		.references(() => radios.id, { onDelete: 'cascade' }),
+	title: text('title').notNull(),
+	artist: text('artist').notNull(),
+	youtubeId: text('youtube_id'),
+	position: integer('position').notNull()
+});
+
 export const playlistTracks = sqliteTable(
 	'playlist_tracks',
 	{

@@ -6,14 +6,6 @@ export function extractSpotifyTrackId(input: string): string | null {
 	return null;
 }
 
-export interface SpotifyTrackMetadata {
-	spotifyId: string;
-	title: string;
-	artist: string;
-	albumArt: string;
-	durationMs: number | null;
-}
-
 export async function fetchSpotifyTitle(trackId: string): Promise<string> {
 	const res = await fetch(
 		`https://open.spotify.com/oembed?url=https://open.spotify.com/track/${trackId}`

@@ -105,10 +105,28 @@ export async function getVideoMetadata(videoId: string): Promise<VideoMetadata> 
 		`https://www.youtube.com/watch?v=${videoId}`
 	]);
 	const item = JSON.parse(stdout.trim());
+
+	let title = item.track ?? '';
+	let artist = item.artist ?? item.creator ?? '';
+
+	if (!title || !artist) {
+		const raw: string = item.title ?? '';
+		const sep = raw.indexOf(' - ');
+		if (sep > 0) {
+			artist = artist || raw.slice(0, sep).trim();
+			title = title || cleanTitle(raw.slice(sep + 3));
+		} else {
+			title = title || cleanTitle(raw) || 'Unknown';
+			artist = artist || (item.channel ?? item.uploader ?? 'Unknown');
+		}
+	} else {
+		title = cleanTitle(title);
+	}
+
 	return {
 		videoId,
-		title: item.title ?? 'Unknown',
-		artist: item.channel ?? item.uploader ?? 'Unknown',
+		title,
+		artist: artist.replace(/\s*;\s*/g, ', '),
 		albumArt: item.thumbnail ?? item.thumbnails?.[0]?.url ?? '',
 		durationMs: item.duration ? Math.round(item.duration * 1000) : null
 	};
@@ -137,7 +155,7 @@ export async function searchYouTube(query: string, limit = 5): Promise<YouTubeSe
 			const item = JSON.parse(line);
 			results.push({
 				videoId: item.id,
-				title: item.title ?? 'Unknown',
+				title: cleanTitle(item.title ?? '') || 'Unknown',
 				artist: item.channel ?? item.uploader ?? 'Unknown',
 				thumbnail: item.thumbnails?.[0]?.url ?? '',
 				duration: formatDuration(item.duration)
@@ -147,6 +165,12 @@ export async function searchYouTube(query: string, limit = 5): Promise<YouTubeSe
 		}
 	}
 	return results;
+}
+
+const VIDEO_NOISE = /\s*[\(\[](?:\s*(?:official|music|video|audio|lyrics?|visuali[sz]er|clip|officiel|hd|hq|4k|remaster(?:ed)?(?:\s+\d{4})?)[\s,]*)+[\)\]]/gi;
+
+function cleanTitle(raw: string): string {
+	return raw.replace(VIDEO_NOISE, '').replace(/\s{2,}/g, ' ').trim();
 }
 
 function formatDuration(seconds: number | null | undefined): string {

@@ -34,6 +34,19 @@
 		}
 	}
 
+	let deletingRadioId = $state<number | null>(null);
+
+	async function deleteRadio(id: number) {
+		if (deletingRadioId) return;
+		deletingRadioId = id;
+		try {
+			const res = await fetch(`/api/radio?id=${id}`, { method: 'DELETE' });
+			if (res.ok) await invalidateAll();
+		} finally {
+			deletingRadioId = null;
+		}
+	}
+
 	function formatDate(iso: string): string {
 		try {
 			return new Date(iso).toLocaleDateString(undefined, {
@@ -161,5 +174,51 @@
 				</a>
 			{/each}
 		</div>
+	{/if}
+
+	{#if data.recentRadios && data.recentRadios.length > 0}
+		<section class="mt-8">
+			<h2 class="mb-3 text-sm font-semibold text-text-secondary">Recent radios</h2>
+			<div class="space-y-2">
+			{#each data.recentRadios as radio (radio.id)}
+				<div class="flex items-center gap-4 rounded-xl border border-border bg-surface-raised p-4 transition-colors hover:bg-surface-overlay">
+					<a href="/radio/{radio.id}" class="flex min-w-0 flex-1 items-center gap-4">
+						{#if radio.seedAlbumArt}
+							<img
+								src={radio.seedAlbumArt}
+								alt=""
+								class="h-12 w-12 shrink-0 rounded-lg object-cover"
+							/>
+						{:else}
+							<div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-accent/10 text-accent">
+								<Icon name="radio" size={20} />
+							</div>
+						{/if}
+						<div class="min-w-0 flex-1">
+							<p class="truncate text-sm font-medium text-text-primary">
+								{radio.seedArtist} — {radio.seedTitle}
+							</p>
+							<p class="text-xs text-text-muted">
+								{radio.trackCount} track{radio.trackCount !== 1 ? 's' : ''}
+								{#if radio.createdAt}
+									<span class="mx-1">·</span>
+									{formatDate(radio.createdAt)}
+								{/if}
+							</p>
+						</div>
+						<span class="shrink-0 text-text-muted"><Icon name="chevron-right" size={16} /></span>
+					</a>
+					<button
+						onclick={() => deleteRadio(radio.id)}
+						disabled={deletingRadioId === radio.id}
+						class="shrink-0 rounded-lg p-1.5 text-text-muted hover:text-red-400 transition-colors disabled:opacity-50"
+						title="Delete radio"
+					>
+						<Icon name="trash" size={14} />
+					</button>
+				</div>
+			{/each}
+			</div>
+		</section>
 	{/if}
 </main>

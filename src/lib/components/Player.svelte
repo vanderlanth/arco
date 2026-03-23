@@ -88,10 +88,50 @@
 	});
 
 
-	// --- Re-assert media session on screen lock (visibilitychange) ---
-	function reassertMediaSession() {
-		if (!('mediaSession' in navigator) || !playerState.currentTrack || !playerState.isPlaying) return;
-		const track = playerState.currentTrack;
+	// --- Re-assert playback when returning from background / lock screen ---
+	function handleVisibilityChange() {
+		if (document.visibilityState !== 'visible') return;
+		if (!playerState.currentTrack || !playerState.isPlaying) return;
+
+		updateMediaMetadata(playerState.currentTrack);
+
+		if (audioEl && audioEl.paused) {
+			audioEl.play().catch(() => {});
+		}
+	}
+
+	$effect(() => {
+		document.addEventListener('visibilitychange', handleVisibilityChange);
+		return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+	});
+
+	// --- Media Session action handlers (registered once) ---
+	$effect(() => {
+		if (!('mediaSession' in navigator)) return;
+		navigator.mediaSession.setActionHandler('play', () => { playerState.isPlaying = true; });
+		navigator.mediaSession.setActionHandler('pause', () => { playerState.isPlaying = false; });
+		navigator.mediaSession.setActionHandler('nexttrack', () => { playerState.skipNext(); });
+		navigator.mediaSession.setActionHandler('previoustrack', () => { handleSkipPrev(); });
+		try {
+			navigator.mediaSession.setActionHandler('seekto', (d) => {
+				if (audioEl && d.seekTime != null) {
+					audioEl.currentTime = d.seekTime;
+					playerState.setProgress(d.seekTime);
+				}
+			});
+			navigator.mediaSession.setActionHandler('seekforward', (d) => {
+				if (audioEl) audioEl.currentTime = Math.min(audioEl.duration, audioEl.currentTime + (d.seekOffset ?? 10));
+			});
+			navigator.mediaSession.setActionHandler('seekbackward', (d) => {
+				if (audioEl) audioEl.currentTime = Math.max(0, audioEl.currentTime - (d.seekOffset ?? 10));
+			});
+		} catch {
+			// seek handlers not supported in this browser
+		}
+	});
+
+	function updateMediaMetadata(track: QueueTrack) {
+		if (!('mediaSession' in navigator)) return;
 		navigator.mediaSession.metadata = new MediaMetadata({
 			title: track.title,
 			artist: track.artist,
@@ -103,14 +143,19 @@
 		navigator.mediaSession.playbackState = 'playing';
 	}
 
-	$effect(() => {
-		document.addEventListener('visibilitychange', reassertMediaSession);
-		return () => document.removeEventListener('visibilitychange', reassertMediaSession);
-	});
+	function loadAndPlay(track: QueueTrack, url: string) {
+		if (!audioEl) return;
+		const key = preloadKey(track);
+		const blobUrl = consumePreload(key);
+		audioEl.src = blobUrl ?? url;
+		audioEl.play().catch(() => {});
+		updateMediaMetadata(track);
+	}
 
 	// --- Main audio source management ---
 	let lastTrackQueueId = '';
 	let trackChanging = false;
+	let srcSetByHandler = false;
 
 	$effect(() => {
 		if (!audioEl) return;
@@ -121,44 +166,17 @@
 		if (!url || !current || queueId === lastTrackQueueId) return;
 
 		lastTrackQueueId = queueId;
+		trackChanging = true;
 
-		// Set media session metadata before play() so the OS shows rich controls immediately
-		if ('mediaSession' in navigator) {
-			navigator.mediaSession.metadata = new MediaMetadata({
-				title: current.title,
-				artist: current.artist,
-				album: current.album ?? undefined,
-				artwork: current.albumArt
-					? [{ src: current.albumArt, sizes: '512x512', type: 'image/jpeg' }]
-					: undefined
-			});
-			navigator.mediaSession.setActionHandler('play', () => { playerState.isPlaying = true; });
-			navigator.mediaSession.setActionHandler('pause', () => { playerState.isPlaying = false; });
-			navigator.mediaSession.setActionHandler('nexttrack', () => { playerState.skipNext(); });
-			navigator.mediaSession.setActionHandler('previoustrack', () => { handleSkipPrev(); });
-			try {
-				navigator.mediaSession.setActionHandler('seekto', (d) => {
-					if (audioEl && d.seekTime != null) {
-						audioEl.currentTime = d.seekTime;
-						playerState.setProgress(d.seekTime);
-					}
-				});
-				navigator.mediaSession.setActionHandler('seekforward', (d) => {
-					if (audioEl) audioEl.currentTime = Math.min(audioEl.duration, audioEl.currentTime + (d.seekOffset ?? 10));
-				});
-				navigator.mediaSession.setActionHandler('seekbackward', (d) => {
-					if (audioEl) audioEl.currentTime = Math.max(0, audioEl.currentTime - (d.seekOffset ?? 10));
-				});
-			} catch {
-				// seek handlers not supported in this browser
-			}
+		if (srcSetByHandler) {
+			srcSetByHandler = false;
+			return;
 		}
 
-		trackChanging = true;
+		updateMediaMetadata(current);
 		const key = preloadKey(current);
 		const blobUrl = consumePreload(key);
 		audioEl.src = blobUrl ?? url;
-
 		audioEl.play().catch(() => {});
 	});
 
@@ -168,6 +186,19 @@
 			audioEl.play().catch(() => {});
 			return;
 		}
+
+		// Synchronously load the next track within the ended handler so mobile
+		// browsers keep the audio session alive (they reject async .play() calls
+		// outside the original event's call stack on lock-screen / background).
+		const upcoming = playerState.upNext;
+		if (upcoming.length > 0 && audioEl) {
+			const next = upcoming[0];
+			const url = playerState.getStreamUrl(next);
+			loadAndPlay(next, url);
+			srcSetByHandler = true;
+			lastTrackQueueId = next.queueId;
+		}
+
 		playerState.handleTrackEnded();
 	}
 
@@ -228,6 +259,33 @@
 		// not by raw audio element events, to survive Android audio focus interruptions on lock.
 	}
 
+	let stallRetries = 0;
+	const MAX_STALL_RETRIES = 2;
+
+	function handleWaiting() {
+		if (!audioEl || !playerState.isPlaying || !playerState.currentTrack) return;
+		playerState.setLoading(true);
+
+		// If the audio stalls for too long in background, retry with a fresh source
+		const stallTimer = setTimeout(() => {
+			if (!audioEl || !audioEl.paused || audioEl.readyState >= 3) return;
+			if (stallRetries >= MAX_STALL_RETRIES) { stallRetries = 0; return; }
+			stallRetries++;
+			const track = playerState.currentTrack;
+			if (!track) return;
+			const pos = audioEl.currentTime;
+			audioEl.src = playerState.getStreamUrl(track);
+			audioEl.currentTime = pos;
+			audioEl.play().catch(() => {});
+		}, 8000);
+
+		const onResume = () => {
+			clearTimeout(stallTimer);
+			stallRetries = 0;
+		};
+		audioEl.addEventListener('playing', onResume, { once: true });
+	}
+
 	function handleAudioError() {
 		playerState.setLoading(false);
 		const err = audioEl?.error;
@@ -274,6 +332,7 @@
 	oncanplay={handleCanPlay}
 	onplaying={handlePlaying}
 	onpause={handlePause}
+	onwaiting={handleWaiting}
 	onerror={handleAudioError}
 	onended={handleEnded}
 	preload="auto"

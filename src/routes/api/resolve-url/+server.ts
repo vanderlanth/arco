@@ -24,15 +24,15 @@ export const GET: RequestHandler = async ({ url }) => {
 			const title = await fetchSpotifyTitle(spotifyId);
 			const results = await searchYouTube(title, 1);
 			if (results.length === 0) throw new Error('No YouTube match found');
-			const top = results[0];
+			const meta = await getVideoMetadata(results[0].videoId);
 			return json({
 				type: 'youtube',
 				spotifyId,
-				videoId: top.videoId,
-				title: top.title,
-				artist: top.artist,
-				albumArt: top.thumbnail,
-				durationMs: null
+				videoId: meta.videoId,
+				title: meta.title,
+				artist: meta.artist,
+				albumArt: meta.albumArt,
+				durationMs: meta.durationMs
 			});
 		} catch (e) {
 			const msg = e instanceof Error ? e.message : String(e);

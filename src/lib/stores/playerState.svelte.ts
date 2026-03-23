@@ -50,6 +50,7 @@ function createPlayerState() {
 
 	function getStreamUrl(track: Track): string {
 		if (track.youtubeId) return `/api/stream?videoId=${track.youtubeId}`;
+		if (track.id < 0) return `/api/stream?q=${encodeURIComponent(`${track.artist} - ${track.title}`)}`;
 		return `/api/stream?id=${track.id}`;
 	}
 

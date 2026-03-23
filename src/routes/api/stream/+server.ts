@@ -13,8 +13,15 @@ export const config: Config = {
 export const GET: RequestHandler = async ({ url }) => {
 	const videoIdParam = url.searchParams.get('videoId');
 	const trackId = url.searchParams.get('id');
+	const searchQuery = url.searchParams.get('q');
 
 	let videoId = videoIdParam;
+
+	if (!videoId && searchQuery) {
+		const results = await searchYouTube(searchQuery, 1);
+		if (results.length === 0) throw error(404, 'No YouTube match found');
+		videoId = results[0].videoId;
+	}
 
 	if (!videoId && trackId) {
 		const track = await db.query.tracks.findFirst({

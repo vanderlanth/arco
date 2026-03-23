@@ -14,7 +14,6 @@ export const POST: RequestHandler = async ({ request }) => {
 
 	const now = new Date().toISOString();
 
-	// Reuse existing track record if possible
 	let track;
 	if (spotifyId) {
 		const [existing] = await db
@@ -32,7 +31,13 @@ export const POST: RequestHandler = async ({ request }) => {
 		if (existing) track = existing;
 	}
 
-	if (!track) {
+	if (track) {
+		[track] = await db
+			.update(tracks)
+			.set({ title, artist, albumArt, durationMs })
+			.where(eq(tracks.id, track.id))
+			.returning();
+	} else {
 		[track] = await db
 			.insert(tracks)
 			.values({ title, artist, albumArt, spotifyId, youtubeId, durationMs, addedAt: now })

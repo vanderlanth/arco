@@ -2,7 +2,7 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
 import { tracks, playlistTracks } from '$lib/server/db/schema';
-import { isNotNull } from 'drizzle-orm';
+import { isNotNull, like, sql } from 'drizzle-orm';
 
 export const GET: RequestHandler = async () => {
 	const rows = await db
@@ -31,5 +31,10 @@ export const GET: RequestHandler = async () => {
 		}
 	}
 
-	return json({ migrated, total: values.length });
+	const artistFix = await db
+		.update(tracks)
+		.set({ artist: sql`replace(${tracks.artist}, ';', ', ')` })
+		.where(like(tracks.artist, '%;%'));
+
+	return json({ migrated, total: values.length, artistsFixed: artistFix.rowsAffected });
 };
