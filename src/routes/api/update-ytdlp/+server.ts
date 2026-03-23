@@ -1,12 +1,9 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { APP_SECRET } from '$env/static/private';
-import { pipeline } from 'node:stream/promises';
-import { createWriteStream } from 'node:fs';
-import { chmod } from 'node:fs/promises';
-import { join } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { join } from 'node:path';
 
 const execFileAsync = promisify(execFile);
 
@@ -19,16 +16,14 @@ export const GET: RequestHandler = async ({ url }) => {
 
 	const dest = join(process.env.HOME ?? '/tmp', 'yt-dlp');
 
-	// Download
-	const resp = await fetch(YTDLP_URL);
-	if (!resp.ok || !resp.body) throw error(502, `Download failed: ${resp.status}`);
-
-	await pipeline(resp.body as unknown as NodeJS.ReadableStream, createWriteStream(dest));
-	await chmod(dest, 0o755);
-
-	// Get new version
-	const { stdout } = await execFileAsync(dest, ['--version']);
-	const version = stdout.trim();
-
-	return json({ ok: true, version, dest });
+	try {
+		await execFileAsync('curl', ['-L', YTDLP_URL, '-o', dest]);
+		await execFileAsync('chmod', ['a+rx', dest]);
+		const { stdout } = await execFileAsync(dest, ['--version']);
+		return json({ ok: true, version: stdout.trim(), dest });
+	} catch (e) {
+		const err = e as { message?: string; stderr?: string };
+		const detail = err.stderr?.trim() || err.message || String(e);
+		throw error(500, `Update failed: ${detail}`);
+	}
 };
