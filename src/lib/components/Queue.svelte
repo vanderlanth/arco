@@ -101,7 +101,7 @@
 		</div>
 
 		<ul
-			use:dndzone={{ items: dragItems, flipDurationMs, dropTargetStyle: {} }}
+			use:dndzone={{ items: dragItems, flipDurationMs, dropTargetStyle: {}, dragHandleSelector: '.drag-handle' }}
 			onconsider={handleDndConsider}
 			onfinalize={handleDndFinalize}
 			class="space-y-1"
@@ -109,7 +109,7 @@
 			{#each dragItems as track, index (track.id)}
 				<li class="group flex items-center gap-2 rounded-lg p-2 hover:bg-surface-overlay">
 					<button
-						class="shrink-0 cursor-grab touch-none text-text-muted opacity-50 transition-opacity hover:text-text-secondary group-hover:opacity-100"
+						class="drag-handle shrink-0 cursor-grab touch-none text-text-muted opacity-50 transition-opacity hover:text-text-secondary group-hover:opacity-100"
 						aria-label="Drag to reorder"
 					>
 						<Icon name="drag-vertical" size={16} />
@@ -160,7 +160,7 @@
 		</div>
 
 		<ul
-			use:dndzone={{ items: shuffleDragItems, flipDurationMs, dropTargetStyle: {} }}
+			use:dndzone={{ items: shuffleDragItems, flipDurationMs, dropTargetStyle: {}, dragHandleSelector: '.drag-handle' }}
 			onconsider={handleShuffleDndConsider}
 			onfinalize={handleShuffleDndFinalize}
 			class="space-y-1"
@@ -168,7 +168,7 @@
 			{#each shuffleDragItems as track, index (track.id)}
 				<li class="group flex items-center gap-2 rounded-lg p-2 hover:bg-surface-overlay">
 					<button
-						class="shrink-0 cursor-grab touch-none text-text-muted opacity-50 transition-opacity hover:text-text-secondary group-hover:opacity-100"
+						class="drag-handle shrink-0 cursor-grab touch-none text-text-muted opacity-50 transition-opacity hover:text-text-secondary group-hover:opacity-100"
 						aria-label="Drag to reorder"
 					>
 						<Icon name="drag-vertical" size={16} />

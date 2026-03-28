@@ -4,6 +4,7 @@ export const playlists = sqliteTable('playlists', {
 	id: integer('id').primaryKey({ autoIncrement: true }),
 	name: text('name').notNull(),
 	slug: text('slug').notNull().unique(),
+	emoji: text('emoji'),
 	trackCount: integer('track_count').notNull().default(0),
 	createdAt: text('created_at').notNull()
 });

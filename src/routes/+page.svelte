@@ -3,15 +3,34 @@
 	import { page } from '$app/state';
 	import { goto, invalidateAll } from '$app/navigation';
 	import Icon from '$lib/components/Icon.svelte';
+	import EmojiPicker from '$lib/components/EmojiPicker.svelte';
 
 	let { data }: { data: PageData } = $props();
 
 	const imported = $derived(page.url.searchParams.get('imported'));
 
-	let showNewForm = $state(false);
+	const RANDOM_EMOJIS = [
+		'🎵','🎶','🎸','🎹','🎺','🎻','🥁','🎤','🎧','🎼','🎷','🪕','🪗','🪘',
+		'🔥','⚡','🌊','🌙','☀️','⭐','💫','🌈','🌸','🌺','🌿','🌴','🍀','🌻',
+		'💎','👑','🎯','🎭','🎬','🦋','🐬','🦅','🦁','❤️','💙','💜','✨','🎉'
+	];
+
+	function randomEmoji() {
+		return RANDOM_EMOJIS[Math.floor(Math.random() * RANDOM_EMOJIS.length)];
+	}
+
+	// Create modal state
+	let showCreateModal = $state(false);
 	let newName = $state('');
+	let newEmoji = $state('');
 	let creating = $state(false);
 	let showMoreMenu = $state(false);
+
+	function openCreateModal() {
+		newName = '';
+		newEmoji = randomEmoji();
+		showCreateModal = true;
+	}
 
 	async function createPlaylist() {
 		const name = newName.trim();
@@ -21,12 +40,13 @@
 			const res = await fetch('/api/playlists', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ name })
+				body: JSON.stringify({ name, emoji: newEmoji || null })
 			});
 			if (!res.ok) throw new Error('Failed to create playlist');
 			const playlist = await res.json();
-			showNewForm = false;
+			showCreateModal = false;
 			newName = '';
+			newEmoji = '';
 			await invalidateAll();
 			goto(`/playlist/${playlist.slug}`);
 		} finally {
@@ -72,7 +92,7 @@
 		</div>
 		<div class="flex items-center gap-3">
 			<button
-				onclick={() => (showNewForm = !showNewForm)}
+				onclick={openCreateModal}
 				class="rounded-lg border border-border px-3 py-1.5 text-xs text-text-secondary hover:bg-surface-overlay transition-colors"
 			>
 				New playlist
@@ -98,34 +118,6 @@
 			</div>
 		</div>
 	</header>
-
-	{#if showNewForm}
-		<form
-			onsubmit={(e) => { e.preventDefault(); createPlaylist(); }}
-			class="mb-4 flex items-center gap-2 rounded-lg border border-border bg-surface-raised p-3"
-		>
-			<input
-				bind:value={newName}
-				placeholder="Playlist name"
-				class="flex-1 rounded-md border border-border bg-surface px-3 py-1.5 text-sm text-text-primary placeholder-text-muted outline-none focus:border-accent"
-				autofocus
-			/>
-			<button
-				type="submit"
-				disabled={!newName.trim() || creating}
-				class="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-surface hover:bg-accent-hover transition-colors disabled:opacity-50"
-			>
-				{creating ? 'Creating...' : 'Create'}
-			</button>
-			<button
-				type="button"
-				onclick={() => { showNewForm = false; newName = ''; }}
-				class="rounded-md px-2 py-1.5 text-sm text-text-muted hover:text-text-secondary transition-colors"
-			>
-				Cancel
-			</button>
-		</form>
-	{/if}
 
 	{#if imported}
 		<div class="mb-4 rounded-lg border border-accent/30 bg-accent/10 p-3 text-sm text-accent">
@@ -155,10 +147,14 @@
 			{#each data.playlists as playlist (playlist.id)}
 				<a
 					href="/playlist/{playlist.slug}"
-					class="flex items-center gap-4 rounded-xl border border-border bg-surface-raised p-4 transition-colors hover:bg-surface-overlay"
+					class="flex items-center gap-4 rounded-xl border border-border bg-surface-raised py-1 pl-1 pr-4 transition-colors hover:bg-surface-overlay"
 				>
-					<div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-accent/10 text-accent">
-						<Icon name="music" size={20} />
+					<div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-[#111] text-accent">
+						{#if playlist.emoji}
+							<span class="text-[16px] leading-none">{playlist.emoji}</span>
+						{:else}
+							<Icon name="music" size={20} />
+						{/if}
 					</div>
 					<div class="min-w-0 flex-1">
 						<p class="truncate text-sm font-medium text-text-primary">{playlist.name}</p>
@@ -170,8 +166,7 @@
 							{/if}
 						</p>
 					</div>
-					<span class="shrink-0 text-text-muted"><Icon name="chevron-right" size={16} /></span>
-				</a>
+					</a>
 			{/each}
 		</div>
 	{/if}
@@ -181,7 +176,7 @@
 			<h2 class="mb-3 text-sm font-semibold text-text-secondary">Recent radios</h2>
 			<div class="space-y-2">
 			{#each data.recentRadios as radio (radio.id)}
-				<div class="flex items-center gap-4 rounded-xl border border-border bg-surface-raised p-4 transition-colors hover:bg-surface-overlay">
+				<div class="flex items-center gap-4 rounded-xl border border-border bg-surface-raised py-1 pl-1 pr-4 transition-colors hover:bg-surface-overlay">
 					<a href="/radio/{radio.id}" class="flex min-w-0 flex-1 items-center gap-4">
 						{#if radio.seedAlbumArt}
 							<img
@@ -190,8 +185,8 @@
 								class="h-12 w-12 shrink-0 rounded-lg object-cover"
 							/>
 						{:else}
-							<div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-accent/10 text-accent">
-								<Icon name="radio" size={20} />
+							<div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-[#111] text-accent">
+								<span class="text-[16px] leading-none">📻</span>
 							</div>
 						{/if}
 						<div class="min-w-0 flex-1">
@@ -206,8 +201,7 @@
 								{/if}
 							</p>
 						</div>
-						<span class="shrink-0 text-text-muted"><Icon name="chevron-right" size={16} /></span>
-					</a>
+						</a>
 					<button
 						onclick={() => deleteRadio(radio.id)}
 						disabled={deletingRadioId === radio.id}
@@ -222,3 +216,57 @@
 		</section>
 	{/if}
 </main>
+
+<!-- Create playlist modal -->
+{#if showCreateModal}
+	<div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+		<div class="absolute inset-0 bg-black/60" onclick={() => { showCreateModal = false; }}></div>
+		<div class="relative w-full max-w-sm rounded-xl border border-border bg-surface-raised p-6 shadow-2xl">
+			<h2 class="mb-4 text-base font-semibold text-text-primary">New playlist</h2>
+
+			<!-- Emoji preview + picker -->
+			<div class="mb-4">
+				<div class="mb-2 flex items-center gap-3">
+					<div class="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-[#111] text-accent">
+						{#if newEmoji}
+							<span class="text-3xl leading-none">{newEmoji}</span>
+						{:else}
+							<Icon name="music" size={24} />
+						{/if}
+					</div>
+					<p class="text-xs text-text-muted">Pick a cover emoji</p>
+				</div>
+				<EmojiPicker onselect={(e) => (newEmoji = e)} />
+			</div>
+
+			<!-- Name input -->
+			<form
+				onsubmit={(e) => { e.preventDefault(); createPlaylist(); }}
+			>
+				<input
+					bind:value={newName}
+					placeholder="Playlist name"
+					class="mb-4 w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-text-primary placeholder-text-muted outline-none focus:border-accent"
+					autofocus
+					onkeydown={(e) => { if (e.key === 'Escape') showCreateModal = false; }}
+				/>
+				<div class="flex justify-end gap-2">
+					<button
+						type="button"
+						onclick={() => { showCreateModal = false; }}
+						class="rounded-md px-3 py-1.5 text-sm text-text-muted hover:text-text-secondary transition-colors"
+					>
+						Cancel
+					</button>
+					<button
+						type="submit"
+						disabled={!newName.trim() || creating}
+						class="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-surface hover:bg-accent-hover transition-colors disabled:opacity-50"
+					>
+						{creating ? 'Creating...' : 'Create'}
+					</button>
+				</div>
+			</form>
+		</div>
+	</div>
+{/if}

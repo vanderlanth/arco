@@ -52,17 +52,16 @@
 					<img
 						src={data.radio.seedAlbumArt}
 						alt=""
-						class="h-14 w-14 rounded-lg object-cover shadow"
+						class="h-12 w-12 rounded-lg object-cover shadow"
 					/>
 				{:else}
-					<div class="flex h-14 w-14 items-center justify-center rounded-lg bg-accent/10 text-accent">
-						<Icon name="radio" size={24} />
+					<div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-[#191919] text-accent">
+						<span class="text-2xl leading-none">📻</span>
 					</div>
 				{/if}
 				<div>
-					<p class="text-xs font-medium uppercase tracking-wider text-accent">Radio</p>
 					<h1 class="text-xl font-bold text-text-primary">
-						{data.radio.seedArtist} — {data.radio.seedTitle}
+						<span class="text-accent">Radio</span> {data.radio.seedArtist} — {data.radio.seedTitle}
 					</h1>
 					<p class="mt-0.5 text-xs text-text-muted">
 						{tracks.length} track{tracks.length !== 1 ? 's' : ''}

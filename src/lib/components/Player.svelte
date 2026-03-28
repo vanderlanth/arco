@@ -4,6 +4,7 @@
 	import Queue from './Queue.svelte';
 
 	import Icon from './Icon.svelte';
+	import TextRing from './TextRing.svelte';
 
 	let audioEl = $state<HTMLAudioElement | null>(null);
 	let expanded = $state(false);
@@ -290,14 +291,30 @@
 		playerState.setLoading(false);
 		const err = audioEl?.error;
 		const code = err?.code;
+
+		// Code 1 = MEDIA_ERR_ABORTED (user/app intentionally aborted) — don't auto-skip
+		if (code === 1) return;
+
 		const msg = err?.message || '';
 		const detail =
-			code === 1 ? 'Playback aborted' :
 			code === 2 ? 'Network error' :
 			code === 3 ? 'Decoding error' :
 			code === 4 ? 'Source not supported' :
 			'Unknown error';
-		playerState.setError(`${detail}${msg ? ': ' + msg : ''}`);
+		playerState.setError(`${detail}${msg ? ': ' + msg : ''} — skipping`);
+
+		// Auto-advance: synchronously load next track so mobile browsers keep
+		// the audio session alive (same pattern as handleEnded).
+		const upcoming = playerState.upNext;
+		if (upcoming.length > 0 && audioEl) {
+			const next = upcoming[0];
+			const url = playerState.getStreamUrl(next);
+			loadAndPlay(next, url);
+			srcSetByHandler = true;
+			lastTrackQueueId = next.queueId;
+		}
+
+		playerState.skipNext();
 	}
 
 	function handleSkipPrev() {
@@ -323,6 +340,34 @@
 		const s = Math.floor(seconds % 60);
 		return `${m}:${s.toString().padStart(2, '0')}`;
 	}
+
+	let isDesktop = $state(false);
+
+	$effect(() => {
+		const mql = window.matchMedia('(min-width: 1024px)');
+		isDesktop = mql.matches;
+		const handler = (e: MediaQueryListEvent) => { isDesktop = e.matches; };
+		mql.addEventListener('change', handler);
+		return () => mql.removeEventListener('change', handler);
+	});
+
+	let volume = $state(1);
+	let muted = $state(false);
+
+	$effect(() => {
+		if (!audioEl) return;
+		audioEl.volume = muted ? 0 : volume;
+	});
+
+	function handleVolumeChange(e: Event) {
+		const input = e.target as HTMLInputElement;
+		volume = Number(input.value);
+		if (volume > 0) muted = false;
+	}
+
+	function toggleMute() {
+		muted = !muted;
+	}
 </script>
 
 <audio
@@ -339,7 +384,7 @@
 ></audio>
 
 {#if playerState.error && !errorDismissed}
-	<div class="fixed inset-x-0 bottom-20 z-50 mx-auto max-w-md px-4">
+	<div class="fixed inset-x-0 bottom-20 z-50 mx-auto max-w-md px-4 lg:bottom-4 lg:right-[34vw] lg:left-auto lg:inset-x-auto">
 		<div class="flex items-center gap-3 rounded-lg border border-danger/30 bg-danger/10 px-4 py-3 shadow-lg backdrop-blur">
 			<p class="flex-1 text-sm text-danger">{playerState.error}</p>
 			<button
@@ -354,294 +399,472 @@
 {/if}
 
 {#if playerState.currentTrack}
-	<!-- Expanded full-screen player -->
-	{#if expanded}
-		<div class="fixed inset-0 z-50 flex flex-col bg-surface">
-			<div class="flex items-center justify-between p-4">
-				<button
-					onclick={() => (expanded = false)}
-					class="text-text-muted hover:text-text-primary"
-					aria-label="Minimize player"
-				>
-					<Icon name="chevron-down" size={24} />
-				</button>
-				<button
-					onclick={() => { showQueue = true; expanded = false; }}
-					class="text-text-muted hover:text-text-primary"
-					aria-label="Open queue"
-				>
-					<Icon name="playlist" size={24} />
-				</button>
+	{#if !isDesktop}
+		<!-- MOBILE: Expanded full-screen player -->
+		{#if expanded}
+			<div class="fixed inset-0 z-50 flex flex-col bg-surface">
+				<div class="flex items-center justify-between p-4">
+					<button
+						onclick={() => (expanded = false)}
+						class="text-text-muted hover:text-text-primary"
+						aria-label="Minimize player"
+					>
+						<Icon name="chevron-down" size={24} />
+					</button>
+					<button
+						onclick={() => { showQueue = true; expanded = false; }}
+						class="text-text-muted hover:text-text-primary"
+						aria-label="Open queue"
+					>
+						<Icon name="playlist" size={24} />
+					</button>
+				</div>
+
+				<div class="flex flex-1 flex-col items-center justify-center gap-6 px-8">
+					<div class="relative aspect-square w-full max-w-[360px]">
+						<TextRing
+							text="{playerState.currentTrack.title.toUpperCase()} · {playerState.currentTrack.artist.toUpperCase()} "
+						/>
+
+					</div>
+
+					<div class="w-full text-center">
+						<h2 class="truncate text-xl font-semibold text-text-primary">
+							{playerState.currentTrack.title}
+						</h2>
+						<p class="truncate text-text-secondary">{playerState.currentTrack.artist}</p>
+					</div>
+
+					<div class="flex items-center gap-6">
+						<button
+							onclick={() => playerState.toggleShuffle()}
+							class="transition-colors"
+							class:text-accent={playerState.shuffled}
+							class:text-text-muted={!playerState.shuffled}
+							aria-label="Toggle shuffle"
+						>
+							<Icon name="shuffle" size={20} />
+						</button>
+
+						<button
+							onclick={handleSkipPrev}
+							class="text-text-secondary hover:text-text-primary"
+							aria-label="Previous"
+						>
+							<Icon name="skip-back" size={28} />
+						</button>
+
+						<button
+							onclick={() => playerState.togglePlay()}
+							class="flex h-14 w-14 items-center justify-center rounded-full bg-text-primary text-surface"
+							aria-label={playerState.isPlaying ? 'Pause' : 'Play'}
+						>
+							{#if playerState.loading}
+								<div class="loading-spinner h-6 w-6 border-surface"></div>
+							{:else if playerState.isPlaying}
+								<Icon name="pause" size={24} />
+							{:else}
+								<Icon name="play" size={24} />
+							{/if}
+						</button>
+
+						<button
+							onclick={() => playerState.skipNext()}
+							class="text-text-secondary hover:text-text-primary"
+							aria-label="Next"
+						>
+							<Icon name="skip-forward" size={28} />
+						</button>
+
+						<button
+							onclick={() => playerState.cycleRepeat()}
+							class="transition-colors"
+							class:text-accent={playerState.repeat !== 'off'}
+							class:text-text-muted={playerState.repeat === 'off'}
+							aria-label="Cycle repeat mode ({playerState.repeat})"
+						>
+							{#if playerState.repeat === 'one'}
+								<Icon name="repeat-one" size={20} />
+							{:else}
+								<Icon name="repeat" size={20} />
+							{/if}
+						</button>
+					</div>
+
+					<div class="mx-auto w-full max-w-[420px]">
+						<input
+							type="range"
+							min="0"
+							max={playerState.duration || 0}
+							value={playerState.progress}
+							oninput={handleSeek}
+							class="w-full accent-accent"
+						/>
+						<div class="mt-1 flex justify-between text-xs text-text-muted">
+							<span>{formatTime(playerState.progress)}</span>
+							<span>{formatTime(playerState.duration)}</span>
+						</div>
+					</div>
+
+					<div class="mx-auto hidden w-full max-w-[420px] items-center gap-3 md:flex">
+						<button
+							onclick={toggleMute}
+							class="shrink-0 text-text-secondary hover:text-text-primary"
+							aria-label={muted || volume === 0 ? 'Unmute' : 'Mute'}
+						>
+							{#if muted || volume === 0}
+								<Icon name="volume-mute" size={20} />
+							{:else if volume < 0.5}
+								<Icon name="volume-low" size={20} />
+							{:else}
+								<Icon name="volume-up" size={20} />
+							{/if}
+						</button>
+						<input
+							type="range"
+							min="0"
+							max="1"
+							step="0.02"
+							value={muted ? 0 : volume}
+							oninput={handleVolumeChange}
+							class="volume-slider flex-1 cursor-pointer"
+							style="--vol: {(muted ? 0 : volume) * 100}%"
+							aria-label="Volume"
+						/>
+					</div>
+				</div>
+			</div>
+		{/if}
+
+		<!-- MOBILE: Queue overlay -->
+		{#if showQueue}
+			<div class="fixed inset-x-0 top-0 bottom-[65px] z-[45] flex flex-col bg-surface">
+				<div class="flex items-center justify-end p-4">
+					<button
+						onclick={() => (showQueue = false)}
+						class="text-text-muted hover:text-text-primary"
+						aria-label="Close queue"
+					>
+						<Icon name="close" size={24} />
+					</button>
+				</div>
+				<div class="flex-1 overflow-y-auto px-4">
+					<Queue />
+				</div>
+			</div>
+		{/if}
+
+		<!-- MOBILE: Mini bar -->
+		<div
+			class="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-surface-raised/95 backdrop-blur-lg"
+			class:hidden={expanded}
+		>
+			<div class="h-0.5 bg-surface-overlay">
+				{#if playerState.loading}
+					<div class="loading-bar h-full bg-accent"></div>
+				{:else}
+					<div
+						class="h-full bg-accent transition-all duration-200"
+						style="width: {playerState.duration ? (playerState.progress / playerState.duration) * 100 : 0}%"
+					></div>
+				{/if}
 			</div>
 
-			<div class="flex flex-1 flex-col items-center justify-center gap-6 px-8">
-				<!-- Album art (clickable for play/pause) -->
+			<div class="grid grid-cols-[auto_1fr_auto] items-center gap-2 px-3 py-2">
 				<button
-					onclick={() => playerState.togglePlay()}
-					class="group relative aspect-square w-full max-w-72"
-					aria-label={playerState.isPlaying ? 'Pause' : 'Play'}
+					onclick={() => { showQueue = false; expanded = true; }}
+					class="flex min-w-0 items-center gap-2.5"
 				>
-					{#if playerState.currentTrack.albumArt}
-						<img
-							src={playerState.currentTrack.albumArt}
-							alt="{playerState.currentTrack.title} album art"
-							class="h-full w-full rounded-xl shadow-2xl object-cover"
-						/>
-					{:else}
-						<div class="flex h-full w-full items-center justify-center rounded-xl bg-surface-overlay">
-							<Icon name="music" size={64} class="text-text-muted" />
-						</div>
-					{/if}
-
-					{#if playerState.loading}
-						<div class="absolute inset-0 flex items-center justify-center rounded-xl bg-black/40">
-							<div class="loading-spinner h-10 w-10"></div>
-						</div>
-					{/if}
-
-					<div class="absolute inset-0 flex items-center justify-center rounded-xl bg-black/0 opacity-0 transition-all group-hover:bg-black/30 group-hover:opacity-100">
-						{#if !playerState.loading}
-							{#if playerState.isPlaying}
-								<Icon name="pause" size={48} class="text-white drop-shadow-lg" />
-							{:else}
-								<Icon name="play" size={48} class="text-white drop-shadow-lg" />
-							{/if}
+					<div class="group relative h-10 w-10 shrink-0" role="img">
+						{#if playerState.currentTrack.albumArt}
+							<img
+								src={playerState.currentTrack.albumArt}
+								alt=""
+								class="h-10 w-10 rounded object-cover"
+							/>
+						{:else}
+							<div class="flex h-10 w-10 items-center justify-center rounded bg-surface-overlay text-text-muted">
+								<Icon name="music" size={16} />
+							</div>
 						{/if}
+						{#if playerState.loading}
+							<div class="absolute inset-0 flex items-center justify-center rounded bg-black/40">
+								<div class="loading-spinner h-5 w-5"></div>
+							</div>
+						{/if}
+					</div>
+					<div class="min-w-0 text-left">
+						<p class="truncate text-sm font-medium text-text-primary">
+							{playerState.currentTrack.title}
+						</p>
+						<p class="truncate text-xs text-text-secondary">
+							{playerState.currentTrack.artist}
+						</p>
 					</div>
 				</button>
 
-				<div class="w-full text-center">
-					<h2 class="truncate text-xl font-semibold text-text-primary">
-						{playerState.currentTrack.title}
-					</h2>
-					<p class="truncate text-text-secondary">{playerState.currentTrack.artist}</p>
-				</div>
-
-				<div class="w-full">
-					<input
-						type="range"
-						min="0"
-						max={playerState.duration || 0}
-						value={playerState.progress}
-						oninput={handleSeek}
-						class="w-full accent-accent"
-					/>
-					<div class="mt-1 flex justify-between text-xs text-text-muted">
-						<span>{formatTime(playerState.progress)}</span>
-						<span>{formatTime(playerState.duration)}</span>
-					</div>
-				</div>
-
-				<div class="flex items-center gap-6">
-					<button
-						onclick={() => playerState.toggleShuffle()}
-						class="transition-colors"
-						class:text-accent={playerState.shuffled}
-						class:text-text-muted={!playerState.shuffled}
-						aria-label="Toggle shuffle"
-					>
-						<Icon name="shuffle" size={20} />
-					</button>
-
+				<div class="flex items-center justify-center gap-1">
 					<button
 						onclick={handleSkipPrev}
-						class="text-text-secondary hover:text-text-primary"
+						class="rounded-full p-1.5 text-text-secondary hover:bg-surface-overlay"
 						aria-label="Previous"
 					>
-						<Icon name="skip-back" size={28} />
+						<Icon name="skip-back" size={18} />
 					</button>
 
 					<button
 						onclick={() => playerState.togglePlay()}
-						class="flex h-14 w-14 items-center justify-center rounded-full bg-text-primary text-surface"
+						class="rounded-full p-1.5 text-text-primary hover:bg-surface-overlay"
 						aria-label={playerState.isPlaying ? 'Pause' : 'Play'}
 					>
 						{#if playerState.loading}
-							<div class="loading-spinner h-6 w-6 border-surface"></div>
+							<div class="loading-spinner h-5 w-5"></div>
 						{:else if playerState.isPlaying}
-							<Icon name="pause" size={24} />
+							<Icon name="pause" size={22} />
 						{:else}
-							<Icon name="play" size={24} />
+							<Icon name="play" size={22} />
 						{/if}
 					</button>
 
 					<button
 						onclick={() => playerState.skipNext()}
-						class="text-text-secondary hover:text-text-primary"
+						class="rounded-full p-1.5 text-text-secondary hover:bg-surface-overlay"
 						aria-label="Next"
 					>
-						<Icon name="skip-forward" size={28} />
+						<Icon name="skip-forward" size={18} />
+					</button>
+				</div>
+
+				<div class="flex items-center gap-0.5">
+					<div class="mr-1 hidden items-center gap-1 md:flex">
+						<button
+							onclick={toggleMute}
+							class="rounded-full p-1.5 text-text-secondary hover:bg-surface-overlay"
+							aria-label={muted || volume === 0 ? 'Unmute' : 'Mute'}
+						>
+							{#if muted || volume === 0}
+								<Icon name="volume-mute" size={16} />
+							{:else if volume < 0.5}
+								<Icon name="volume-low" size={16} />
+							{:else}
+								<Icon name="volume-up" size={16} />
+							{/if}
+						</button>
+						<input
+							type="range"
+							min="0"
+							max="1"
+							step="0.02"
+							value={muted ? 0 : volume}
+							oninput={handleVolumeChange}
+							class="volume-slider w-20 cursor-pointer"
+							style="--vol: {(muted ? 0 : volume) * 100}%"
+							aria-label="Volume"
+						/>
+					</div>
+
+					<button
+						onclick={() => playerState.toggleShuffle()}
+						class="rounded-full p-1.5 transition-colors"
+						class:text-accent={playerState.shuffled}
+						class:text-text-muted={!playerState.shuffled}
+						aria-label="Toggle shuffle"
+					>
+						<Icon name="shuffle" size={16} />
 					</button>
 
 					<button
 						onclick={() => playerState.cycleRepeat()}
-						class="transition-colors"
+						class="rounded-full p-1.5 transition-colors"
 						class:text-accent={playerState.repeat !== 'off'}
 						class:text-text-muted={playerState.repeat === 'off'}
 						aria-label="Cycle repeat mode ({playerState.repeat})"
 					>
 						{#if playerState.repeat === 'one'}
-							<Icon name="repeat-one" size={20} />
+							<Icon name="repeat-one" size={16} />
 						{:else}
-							<Icon name="repeat" size={20} />
+							<Icon name="repeat" size={16} />
 						{/if}
+					</button>
+
+					<button
+						onclick={() => (showQueue = !showQueue)}
+						class="rounded-full p-1.5 text-text-secondary hover:bg-surface-overlay"
+						class:text-accent={showQueue}
+						aria-label={showQueue ? 'Close queue' : 'Open queue'}
+					>
+						<Icon name="playlist" size={16} />
 					</button>
 				</div>
 			</div>
 		</div>
-	{/if}
-
-	<!-- Queue overlay (mini bar stays visible underneath) -->
-	{#if showQueue}
-		<div class="fixed inset-x-0 top-0 bottom-[65px] z-[45] flex flex-col bg-surface">
+	{:else}
+		<!-- DESKTOP: Side panel player -->
+		<aside class="desktop-panel flex h-screen w-[33vw] min-w-[360px] shrink-0 flex-col border-l border-border bg-surface">
+			<!-- Queue toggle (top-right) -->
 			<div class="flex items-center justify-end p-4">
 				<button
-					onclick={() => (showQueue = false)}
-					class="text-text-muted hover:text-text-primary"
-					aria-label="Close queue"
-				>
-					<Icon name="close" size={24} />
-				</button>
-			</div>
-			<div class="flex-1 overflow-y-auto px-4">
-				<Queue />
-			</div>
-		</div>
-	{/if}
-
-	<!-- Mini bar (always visible when not in full-screen player) -->
-	<div
-		class="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-surface-raised/95 backdrop-blur-lg"
-		class:hidden={expanded}
-	>
-		<!-- Progress line / loading indicator -->
-		<div class="h-0.5 bg-surface-overlay">
-			{#if playerState.loading}
-				<div class="loading-bar h-full bg-accent"></div>
-			{:else}
-				<div
-					class="h-full bg-accent transition-all duration-200"
-					style="width: {playerState.duration ? (playerState.progress / playerState.duration) * 100 : 0}%"
-				></div>
-			{/if}
-		</div>
-
-		<div class="grid grid-cols-[auto_1fr_auto] items-center gap-2 px-3 py-2">
-			<!-- Left: album art + track info -->
-			<button
-				onclick={() => { showQueue = false; expanded = true; }}
-				class="flex min-w-0 items-center gap-2.5"
-			>
-				<div class="group relative h-10 w-10 shrink-0" role="img">
-					{#if playerState.currentTrack.albumArt}
-						<img
-							src={playerState.currentTrack.albumArt}
-							alt=""
-							class="h-10 w-10 rounded object-cover"
-						/>
-					{:else}
-						<div class="flex h-10 w-10 items-center justify-center rounded bg-surface-overlay text-text-muted">
-							<Icon name="music" size={16} />
-						</div>
-					{/if}
-					{#if playerState.loading}
-						<div class="absolute inset-0 flex items-center justify-center rounded bg-black/40">
-							<div class="loading-spinner h-5 w-5"></div>
-						</div>
-					{/if}
-				</div>
-				<div class="min-w-0 text-left">
-					<p class="truncate text-sm font-medium text-text-primary">
-						{playerState.currentTrack.title}
-					</p>
-					<p class="truncate text-xs text-text-secondary">
-						{playerState.currentTrack.artist}
-					</p>
-				</div>
-			</button>
-
-			<!-- Center: transport controls -->
-			<div class="flex items-center justify-center gap-1">
-				<button
-					onclick={handleSkipPrev}
-					class="rounded-full p-1.5 text-text-secondary hover:bg-surface-overlay"
-					aria-label="Previous"
-				>
-					<Icon name="skip-back" size={18} />
-				</button>
-
-				<button
-					onclick={() => playerState.togglePlay()}
-					class="rounded-full p-1.5 text-text-primary hover:bg-surface-overlay"
-					aria-label={playerState.isPlaying ? 'Pause' : 'Play'}
-				>
-					{#if playerState.loading}
-						<div class="loading-spinner h-5 w-5"></div>
-					{:else if playerState.isPlaying}
-						<Icon name="pause" size={22} />
-					{:else}
-						<Icon name="play" size={22} />
-					{/if}
-				</button>
-
-				<button
-					onclick={() => playerState.skipNext()}
-					class="rounded-full p-1.5 text-text-secondary hover:bg-surface-overlay"
-					aria-label="Next"
-				>
-					<Icon name="skip-forward" size={18} />
-				</button>
-			</div>
-
-			<!-- Right: shuffle, repeat, queue -->
-			<div class="flex items-center gap-0.5">
-				<button
-					onclick={() => playerState.toggleShuffle()}
-					class="rounded-full p-1.5 transition-colors"
-					class:text-accent={playerState.shuffled}
-					class:text-text-muted={!playerState.shuffled}
-					aria-label="Toggle shuffle"
-				>
-					<Icon name="shuffle" size={16} />
-				</button>
-
-				<button
-					onclick={() => playerState.cycleRepeat()}
-					class="rounded-full p-1.5 transition-colors"
-					class:text-accent={playerState.repeat !== 'off'}
-					class:text-text-muted={playerState.repeat === 'off'}
-					aria-label="Cycle repeat mode ({playerState.repeat})"
-				>
-					{#if playerState.repeat === 'one'}
-						<Icon name="repeat-one" size={16} />
-					{:else}
-						<Icon name="repeat" size={16} />
-					{/if}
-				</button>
-
-				<button
 					onclick={() => (showQueue = !showQueue)}
-					class="rounded-full p-1.5 text-text-secondary hover:bg-surface-overlay"
+					class="text-text-muted hover:text-text-primary"
 					class:text-accent={showQueue}
 					aria-label={showQueue ? 'Close queue' : 'Open queue'}
 				>
-					<Icon name="playlist" size={16} />
+					<Icon name="playlist" size={24} />
 				</button>
 			</div>
-		</div>
-	</div>
+
+			{#if showQueue}
+				<!-- Queue view -->
+				<div class="flex-1 overflow-y-auto px-4">
+					<Queue />
+				</div>
+			{:else}
+				<!-- Controls section -->
+				<div class="flex flex-1 flex-col items-center justify-center gap-5 px-6 pb-8">
+					<!-- TextRing -->
+					<div class="relative aspect-square w-full max-w-[280px]">
+						<TextRing
+							text="{playerState.currentTrack.title.toUpperCase()} · {playerState.currentTrack.artist.toUpperCase()} "
+						/>
+
+					</div>
+
+					<!-- Track info -->
+					<div class="w-full text-center">
+						<h2 class="truncate text-lg font-semibold text-text-primary">
+							{playerState.currentTrack.title}
+						</h2>
+						<p class="truncate text-sm text-text-secondary">{playerState.currentTrack.artist}</p>
+					</div>
+
+					<!-- Transport controls -->
+					<div class="flex items-center gap-5">
+						<button
+							onclick={() => playerState.toggleShuffle()}
+							class="transition-colors"
+							class:text-accent={playerState.shuffled}
+							class:text-text-muted={!playerState.shuffled}
+							aria-label="Toggle shuffle"
+						>
+							<Icon name="shuffle" size={18} />
+						</button>
+
+						<button
+							onclick={handleSkipPrev}
+							class="text-text-secondary hover:text-text-primary"
+							aria-label="Previous"
+						>
+							<Icon name="skip-back" size={24} />
+						</button>
+
+						<button
+							onclick={() => playerState.togglePlay()}
+							class="flex h-12 w-12 items-center justify-center rounded-full bg-text-primary text-surface"
+							aria-label={playerState.isPlaying ? 'Pause' : 'Play'}
+						>
+							{#if playerState.loading}
+								<div class="loading-spinner h-5 w-5 border-surface"></div>
+							{:else if playerState.isPlaying}
+								<Icon name="pause" size={22} />
+							{:else}
+								<Icon name="play" size={22} />
+							{/if}
+						</button>
+
+						<button
+							onclick={() => playerState.skipNext()}
+							class="text-text-secondary hover:text-text-primary"
+							aria-label="Next"
+						>
+							<Icon name="skip-forward" size={24} />
+						</button>
+
+						<button
+							onclick={() => playerState.cycleRepeat()}
+							class="transition-colors"
+							class:text-accent={playerState.repeat !== 'off'}
+							class:text-text-muted={playerState.repeat === 'off'}
+							aria-label="Cycle repeat mode ({playerState.repeat})"
+						>
+							{#if playerState.repeat === 'one'}
+								<Icon name="repeat-one" size={18} />
+							{:else}
+								<Icon name="repeat" size={18} />
+							{/if}
+						</button>
+					</div>
+
+					<!-- Progress bar -->
+					<div class="w-full">
+						<input
+							type="range"
+							min="0"
+							max={playerState.duration || 0}
+							value={playerState.progress}
+							oninput={handleSeek}
+							class="w-full accent-accent"
+						/>
+						<div class="mt-1 flex justify-between text-xs text-text-muted">
+							<span>{formatTime(playerState.progress)}</span>
+							<span>{formatTime(playerState.duration)}</span>
+						</div>
+					</div>
+
+					<!-- Volume -->
+					<div class="flex w-full items-center gap-3">
+						<button
+							onclick={toggleMute}
+							class="shrink-0 text-text-secondary hover:text-text-primary"
+							aria-label={muted || volume === 0 ? 'Unmute' : 'Mute'}
+						>
+							{#if muted || volume === 0}
+								<Icon name="volume-mute" size={18} />
+							{:else if volume < 0.5}
+								<Icon name="volume-low" size={18} />
+							{:else}
+								<Icon name="volume-up" size={18} />
+							{/if}
+						</button>
+						<input
+							type="range"
+							min="0"
+							max="1"
+							step="0.02"
+							value={muted ? 0 : volume}
+							oninput={handleVolumeChange}
+							class="volume-slider flex-1 cursor-pointer"
+							style="--vol: {(muted ? 0 : volume) * 100}%"
+							aria-label="Volume"
+						/>
+					</div>
+				</div>
+			{/if}
+		</aside>
+	{/if}
 {/if}
 
 <style>
 	.loading-spinner {
-		border: 2.5px solid rgba(255, 255, 255, 0.2);
-		border-top-color: white;
+		border: 2.5px solid rgba(59, 130, 246, 0.2);
+		border-top-color: rgb(59, 130, 246);
 		border-radius: 50%;
 		animation: spin 0.7s linear infinite;
 	}
 
 	.loading-bar {
 		animation: indeterminate 1.4s ease-in-out infinite;
+	}
+
+	.desktop-panel {
+		animation: expand-panel 300ms ease-out both;
+		overflow: hidden;
+	}
+
+	@keyframes expand-panel {
+		from {
+			width: 0;
+			min-width: 0;
+		}
 	}
 
 	@keyframes spin {

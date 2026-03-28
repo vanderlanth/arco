@@ -2,6 +2,7 @@ export interface Playlist {
 	id: number;
 	name: string;
 	slug: string;
+	emoji?: string | null;
 	trackCount: number;
 	createdAt: string;
 }

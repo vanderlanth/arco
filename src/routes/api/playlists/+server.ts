@@ -13,6 +13,7 @@ function slugify(name: string): string {
 export const POST: RequestHandler = async ({ request }) => {
 	const body = await request.json();
 	const name = body.name?.trim();
+	const emoji = body.emoji?.trim() || null;
 	if (!name) throw error(400, 'Playlist name is required');
 
 	let slug = slugify(name);
@@ -28,6 +29,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		.values({
 			name,
 			slug,
+			emoji,
 			trackCount: 0,
 			createdAt: new Date().toISOString()
 		})

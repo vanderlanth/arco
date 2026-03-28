@@ -9,6 +9,7 @@ export const load: PageServerLoad = async () => {
 			id: playlists.id,
 			name: playlists.name,
 			slug: playlists.slug,
+			emoji: playlists.emoji,
 			trackCount: sql<number>`count(${playlistTracks.id})`,
 			createdAt: playlists.createdAt
 		})

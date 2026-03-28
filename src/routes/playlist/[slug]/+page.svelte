@@ -6,8 +6,9 @@
 	import TrackList from '$lib/components/TrackList.svelte';
 	import { playerState } from '$lib/stores/playerState.svelte';
 	import { page } from '$app/state';
-	import { goto } from '$app/navigation';
+	import { goto, invalidateAll } from '$app/navigation';
 	import Icon from '$lib/components/Icon.svelte';
+	import EmojiPicker from '$lib/components/EmojiPicker.svelte';
 
 	let { data }: { data: PageData } = $props();
 
@@ -25,6 +26,40 @@
 	let showDeleteModal = $state(false);
 	let deleteConfirmName = $state('');
 	let deleting = $state(false);
+
+	// Edit modal
+	let showEditModal = $state(false);
+	let editName = $state('');
+	let editEmoji = $state('');
+	let saving = $state(false);
+
+	function openEditModal() {
+		editName = data.playlist.name;
+		editEmoji = data.playlist.emoji ?? '';
+		showEditModal = true;
+	}
+
+	async function saveEdit() {
+		const name = editName.trim();
+		if (!name || saving) return;
+		saving = true;
+		try {
+			const res = await fetch(`/api/playlists/${data.playlist.id}`, {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ name, emoji: editEmoji || null })
+			});
+			if (!res.ok) throw new Error('Failed to save');
+			const updated = await res.json();
+			showEditModal = false;
+			await invalidateAll();
+			if (updated.slug !== data.playlist.slug) {
+				goto(`/playlist/${updated.slug}`);
+			}
+		} finally {
+			saving = false;
+		}
+	}
 
 	const canDelete = $derived(deleteConfirmName.trim() === data.playlist.name);
 
@@ -116,19 +151,37 @@
 			<Icon name="chevron-left" size={14} /> All playlists
 		</a>
 		<div class="flex items-center justify-between">
-			<div>
-				<h1 class="text-2xl font-bold text-text-primary">{data.playlist.name}</h1>
-				<p class="mt-1 text-xs text-text-muted">
-					{localTracks.length} track{localTracks.length !== 1 ? 's' : ''}
-				</p>
+			<div class="flex items-center gap-3">
+				<div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-[#191919] text-accent">
+					{#if data.playlist.emoji}
+						<span class="text-2xl leading-none">{data.playlist.emoji}</span>
+					{:else}
+						<Icon name="music" size={20} />
+					{/if}
+				</div>
+				<div>
+					<h1 class="text-2xl font-bold text-text-primary">{data.playlist.name}</h1>
+					<p class="mt-1 text-xs text-text-muted">
+						{localTracks.length} track{localTracks.length !== 1 ? 's' : ''}
+					</p>
+				</div>
 			</div>
-			<button
-				onclick={openDeleteModal}
-				class="rounded-lg border border-border p-2 text-text-muted hover:text-red-400 hover:border-red-400/30 transition-colors"
-				title="Delete playlist"
-			>
-				<Icon name="trash" size={16} />
-			</button>
+			<div class="flex items-center gap-2">
+				<button
+					onclick={openEditModal}
+					class="rounded-lg border border-border p-2 text-text-muted hover:text-text-primary hover:border-border transition-colors"
+					title="Edit playlist"
+				>
+					<Icon name="edit" size={16} />
+				</button>
+				<button
+					onclick={openDeleteModal}
+					class="rounded-lg border border-border p-2 text-text-muted hover:text-red-400 hover:border-red-400/30 transition-colors"
+					title="Delete playlist"
+				>
+					<Icon name="trash" size={16} />
+				</button>
+			</div>
 		</div>
 	</header>
 
@@ -171,6 +224,58 @@
 	{:else}
 		<div class="py-20 text-center">
 			<p class="text-sm text-text-muted">This playlist is empty.</p>
+		</div>
+	{/if}
+
+	<!-- Edit modal -->
+	{#if showEditModal}
+		<div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+			<div class="absolute inset-0 bg-black/60" onclick={() => { showEditModal = false; }}></div>
+			<div class="relative w-full max-w-sm rounded-xl border border-border bg-surface-raised p-6 shadow-2xl">
+				<h2 class="mb-4 text-base font-semibold text-text-primary">Edit playlist</h2>
+
+				<!-- Emoji preview + picker -->
+				<div class="mb-4">
+					<div class="mb-2 flex items-center gap-3">
+						<div class="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-[#111] text-accent">
+							{#if editEmoji}
+								<span class="text-3xl leading-none">{editEmoji}</span>
+							{:else}
+								<Icon name="music" size={24} />
+							{/if}
+						</div>
+						<p class="text-xs text-text-muted">Pick a cover emoji</p>
+					</div>
+					<EmojiPicker onselect={(e) => (editEmoji = e)} />
+				</div>
+
+				<!-- Name input -->
+				<form onsubmit={(e) => { e.preventDefault(); saveEdit(); }}>
+					<input
+						bind:value={editName}
+						placeholder="Playlist name"
+						class="mb-4 w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-text-primary placeholder-text-muted outline-none focus:border-accent"
+						autofocus
+						onkeydown={(e) => { if (e.key === 'Escape') showEditModal = false; }}
+					/>
+					<div class="flex justify-end gap-2">
+						<button
+							type="button"
+							onclick={() => { showEditModal = false; }}
+							class="rounded-md px-3 py-1.5 text-sm text-text-muted hover:text-text-secondary transition-colors"
+						>
+							Cancel
+						</button>
+						<button
+							type="submit"
+							disabled={!editName.trim() || saving}
+							class="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-surface hover:bg-accent-hover transition-colors disabled:opacity-50"
+						>
+							{saving ? 'Saving...' : 'Save'}
+						</button>
+					</div>
+				</form>
+			</div>
 		</div>
 	{/if}
 
