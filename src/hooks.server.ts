@@ -44,8 +44,9 @@ export const handle: Handle = async ({ event, resolve }) => {
 	const { pathname } = event.url;
 	const isLoginRoute = pathname.startsWith('/login');
 	const isLogoutRoute = pathname.startsWith('/logout');
+	const isPublicApi = pathname === '/api/update-ytdlp';
 
-	if (!isAuthenticated && !isLoginRoute && !isLogoutRoute) {
+	if (!isAuthenticated && !isLoginRoute && !isLogoutRoute && !isPublicApi) {
 		throw redirect(303, '/login');
 	}
 

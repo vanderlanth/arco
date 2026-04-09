@@ -1,6 +1,5 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { APP_SECRET } from '$env/static/private';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { join } from 'node:path';
@@ -12,18 +11,19 @@ const YTDLP_URL =
 
 export const GET: RequestHandler = async ({ url }) => {
 	const token = url.searchParams.get('token');
-	if (!token || token !== APP_SECRET) throw error(401, 'Unauthorized');
+	if (!token || token !== process.env.APP_SECRET) throw error(401, 'Unauthorized');
 
 	const dest = join(process.env.HOME ?? '/tmp', 'yt-dlp');
 
-	try {
-		await execFileAsync('curl', ['-L', YTDLP_URL, '-o', dest]);
-		await execFileAsync('chmod', ['a+rx', dest]);
-		const { stdout } = await execFileAsync(dest, ['--version']);
-		return json({ ok: true, version: stdout.trim(), dest });
-	} catch (e) {
-		const err = e as { message?: string; stderr?: string };
-		const detail = err.stderr?.trim() || err.message || String(e);
-		throw error(500, `Update failed: ${detail}`);
-	}
+	// Run update in background so the HTTP request doesn't time out on cron-job.org
+	(async () => {
+		try {
+			await execFileAsync('curl', ['-L', YTDLP_URL, '-o', dest]);
+			await execFileAsync('chmod', ['a+rx', dest]);
+		} catch (e) {
+			console.error('[update-ytdlp] update failed:', e);
+		}
+	})();
+
+	return json({ ok: true, message: 'Update triggered in background', dest });
 };
