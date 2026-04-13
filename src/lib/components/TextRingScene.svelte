@@ -2,7 +2,7 @@
 	import { T, useTask, useThrelte } from '@threlte/core';
 	import { Text } from '@threlte/extras';
 	import { MeshTransmissionMaterial } from '@pmndrs/vanilla';
-	import { Group, Mesh as ThreeMesh, WebGLRenderTarget, Color } from 'three';
+	import { Group, Mesh as ThreeMesh, WebGLRenderTarget, Color, Vector2 } from 'three';
 
 	let { text }: { text: string } = $props();
 
@@ -16,6 +16,32 @@
 	const RADIUS_INNER = 1.2;
 	const HEIGHT = 4;
 	const SEGMENTS = 32;
+
+	const BEVEL = 0.1;
+	const BEVEL_SEGS = 10;
+
+	// Profile runs bottom → top so LatheGeometry normals point outward on the
+	// side and away from the mesh on the caps (matching CylinderGeometry).
+	function buildCylinderProfile(): Vector2[] {
+		const pts: Vector2[] = [];
+		pts.push(new Vector2(0, -HEIGHT / 2));
+		pts.push(new Vector2(RADIUS - BEVEL, -HEIGHT / 2));
+		// bottom bevel arc: flat cap → side
+		for (let i = 1; i <= BEVEL_SEGS; i++) {
+			const t = -Math.PI / 2 + (Math.PI / 2) * (i / BEVEL_SEGS);
+			pts.push(new Vector2(RADIUS - BEVEL + BEVEL * Math.cos(t), -HEIGHT / 2 + BEVEL + BEVEL * Math.sin(t)));
+		}
+		pts.push(new Vector2(RADIUS, HEIGHT / 2 - BEVEL));
+		// top bevel arc: side → flat cap
+		for (let i = 1; i <= BEVEL_SEGS; i++) {
+			const t = (Math.PI / 2) * (i / BEVEL_SEGS);
+			pts.push(new Vector2(RADIUS - BEVEL + BEVEL * Math.cos(t), HEIGHT / 2 - BEVEL + BEVEL * Math.sin(t)));
+		}
+		pts.push(new Vector2(0, HEIGHT / 2));
+		return pts;
+	}
+
+	const lathePts = buildCylinderProfile();
 
 	const chars = $derived(text.split(''));
 	const angleStep = $derived((2 * Math.PI) / chars.length);
@@ -44,7 +70,7 @@
 
 		if (midGroupRef) {
 			midGroupRef.rotation.y -= 0.005;
-			midGroupRef.rotation.x += 0.01;
+			midGroupRef.rotation.x += 0.005;
 			midGroupRef.rotation.z -= 0.002;
 		}
 
@@ -72,7 +98,7 @@
 
 <T.Group bind:ref={groupRef}>
 	<T.Mesh bind:ref={glassMeshRef}>
-		<T.CylinderGeometry args={[RADIUS, RADIUS, HEIGHT, SEGMENTS]} />
+		<T.LatheGeometry args={[lathePts, SEGMENTS]} />
 		<T is={material} attach="material" />
 	</T.Mesh>
 

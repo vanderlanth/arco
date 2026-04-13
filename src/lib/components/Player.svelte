@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { playerState } from '$lib/stores/playerState.svelte';
 	import type { QueueTrack } from '$lib/stores/playerState.svelte';
+	import { snackbar } from '$lib/stores/snackbar.svelte';
 	import Queue from './Queue.svelte';
 
 	import Icon from './Icon.svelte';
@@ -335,6 +336,16 @@
 		}
 	}
 
+	async function copyCurrentTrackLink() {
+		const track = playerState.currentTrack;
+		if (!track) return;
+		const url = track.spotifyId
+			? `https://open.spotify.com/track/${track.spotifyId}`
+			: `https://youtube.com/watch?v=${track.youtubeId}`;
+		await navigator.clipboard.writeText(url!);
+		snackbar.show('Link copied to clipboard');
+	}
+
 	function formatTime(seconds: number): string {
 		const m = Math.floor(seconds / 60);
 		const s = Math.floor(seconds % 60);
@@ -411,6 +422,14 @@
 					>
 						<Icon name="chevron-down" size={24} />
 					</button>
+					<div class="flex items-center gap-2">
+					<button
+						onclick={copyCurrentTrackLink}
+						class="text-text-muted hover:text-text-primary"
+						aria-label="Copy link"
+					>
+						<Icon name="link" size={20} />
+					</button>
 					<button
 						onclick={() => { showQueue = true; expanded = false; }}
 						class="text-text-muted hover:text-text-primary"
@@ -418,6 +437,7 @@
 					>
 						<Icon name="playlist" size={24} />
 					</button>
+				</div>
 				</div>
 
 				<div class="flex flex-1 flex-col items-center justify-center gap-6 px-8">
@@ -492,14 +512,20 @@
 					</div>
 
 					<div class="mx-auto w-full max-w-[420px]">
-						<input
-							type="range"
-							min="0"
-							max={playerState.duration || 0}
-							value={playerState.progress}
-							oninput={handleSeek}
-							class="w-full accent-accent"
-						/>
+						<div
+							class="tick-bar w-full"
+							style="--fill-pct: {playerState.duration ? ((playerState.progress / playerState.duration) * 100).toFixed(2) : 0}%"
+						>
+							<input
+								type="range"
+								min="0"
+								max={playerState.duration || 0}
+								value={playerState.progress}
+								oninput={handleSeek}
+								class="tick-bar-input"
+								aria-label="Seek"
+							/>
+						</div>
 						<div class="mt-1 flex justify-between text-xs text-text-muted">
 							<span>{formatTime(playerState.progress)}</span>
 							<span>{formatTime(playerState.duration)}</span>
@@ -520,17 +546,21 @@
 								<Icon name="volume-up" size={20} />
 							{/if}
 						</button>
-						<input
-							type="range"
-							min="0"
-							max="1"
-							step="0.02"
-							value={muted ? 0 : volume}
-							oninput={handleVolumeChange}
-							class="volume-slider flex-1 cursor-pointer"
-							style="--vol: {(muted ? 0 : volume) * 100}%"
-							aria-label="Volume"
-						/>
+						<div
+							class="tick-bar flex-1"
+							style="--fill-pct: {(muted ? 0 : volume) * 100}%"
+						>
+							<input
+								type="range"
+								min="0"
+								max="1"
+								step="0.02"
+								value={muted ? 0 : volume}
+								oninput={handleVolumeChange}
+								class="tick-bar-input"
+								aria-label="Volume"
+							/>
+						</div>
 					</div>
 				</div>
 			</div>
@@ -650,17 +680,21 @@
 								<Icon name="volume-up" size={16} />
 							{/if}
 						</button>
-						<input
-							type="range"
-							min="0"
-							max="1"
-							step="0.02"
-							value={muted ? 0 : volume}
-							oninput={handleVolumeChange}
-							class="volume-slider w-20 cursor-pointer"
-							style="--vol: {(muted ? 0 : volume) * 100}%"
-							aria-label="Volume"
-						/>
+						<div
+							class="tick-bar w-20"
+							style="--fill-pct: {(muted ? 0 : volume) * 100}%"
+						>
+							<input
+								type="range"
+								min="0"
+								max="1"
+								step="0.02"
+								value={muted ? 0 : volume}
+								oninput={handleVolumeChange}
+								class="tick-bar-input"
+								aria-label="Volume"
+							/>
+						</div>
 					</div>
 
 					<button
@@ -702,7 +736,14 @@
 		<!-- DESKTOP: Side panel player -->
 		<aside class="desktop-panel flex h-screen w-[33vw] min-w-[360px] shrink-0 flex-col border-l border-border bg-surface">
 			<!-- Queue toggle (top-right) -->
-			<div class="flex items-center justify-end p-4">
+			<div class="flex items-center justify-end gap-2 p-4">
+				<button
+					onclick={copyCurrentTrackLink}
+					class="text-text-muted hover:text-text-primary"
+					aria-label="Copy link"
+				>
+					<Icon name="link" size={20} />
+				</button>
 				<button
 					onclick={() => (showQueue = !showQueue)}
 					class="text-text-muted hover:text-text-primary"
@@ -796,14 +837,20 @@
 
 					<!-- Progress bar -->
 					<div class="w-full">
-						<input
-							type="range"
-							min="0"
-							max={playerState.duration || 0}
-							value={playerState.progress}
-							oninput={handleSeek}
-							class="w-full accent-accent"
-						/>
+						<div
+							class="tick-bar w-full"
+							style="--fill-pct: {playerState.duration ? ((playerState.progress / playerState.duration) * 100).toFixed(2) : 0}%"
+						>
+							<input
+								type="range"
+								min="0"
+								max={playerState.duration || 0}
+								value={playerState.progress}
+								oninput={handleSeek}
+								class="tick-bar-input"
+								aria-label="Seek"
+							/>
+						</div>
 						<div class="mt-1 flex justify-between text-xs text-text-muted">
 							<span>{formatTime(playerState.progress)}</span>
 							<span>{formatTime(playerState.duration)}</span>
@@ -825,17 +872,21 @@
 								<Icon name="volume-up" size={18} />
 							{/if}
 						</button>
-						<input
-							type="range"
-							min="0"
-							max="1"
-							step="0.02"
-							value={muted ? 0 : volume}
-							oninput={handleVolumeChange}
-							class="volume-slider flex-1 cursor-pointer"
-							style="--vol: {(muted ? 0 : volume) * 100}%"
-							aria-label="Volume"
-						/>
+						<div
+							class="tick-bar flex-1"
+							style="--fill-pct: {(muted ? 0 : volume) * 100}%"
+						>
+							<input
+								type="range"
+								min="0"
+								max="1"
+								step="0.02"
+								value={muted ? 0 : volume}
+								oninput={handleVolumeChange}
+								class="tick-bar-input"
+								aria-label="Volume"
+							/>
+						</div>
 					</div>
 				</div>
 			{/if}
@@ -845,8 +896,8 @@
 
 <style>
 	.loading-spinner {
-		border: 2.5px solid rgba(59, 130, 246, 0.2);
-		border-top-color: rgb(59, 130, 246);
+		border: 2.5px solid color-mix(in srgb, var(--color-accent) 20%, transparent);
+		border-top-color: var(--color-accent);
 		border-radius: 50%;
 		animation: spin 0.7s linear infinite;
 	}

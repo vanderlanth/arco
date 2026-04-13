@@ -233,6 +233,21 @@ function createPlayerState() {
 		}
 	}
 
+	function setSourceList(list: Track[], currentIndex: number) {
+		originalSourceList = list;
+		if (shuffled) {
+			const current = list[currentIndex];
+			const rest = list.filter((_, i) => i !== currentIndex);
+			shuffledSourceList = current
+				? [current, ...fisherYatesShuffle(rest)]
+				: fisherYatesShuffle(list);
+			sourceIndex = 0;
+		} else {
+			shuffledSourceList = [];
+			sourceIndex = currentIndex;
+		}
+	}
+
 	function cycleRepeat() {
 		const modes: RepeatMode[] = ['off', 'all', 'one'];
 		const idx = modes.indexOf(repeat);
@@ -316,7 +331,8 @@ function createPlayerState() {
 		handleTrackEnded,
 		clearError,
 		setLoading,
-		setError
+		setError,
+		setSourceList
 	};
 }
 

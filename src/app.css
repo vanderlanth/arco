@@ -9,8 +9,8 @@
 	--color-text-primary: #f5f5f5;
 	--color-text-secondary: #a0a0a0;
 	--color-text-muted: #666666;
-	--color-accent: #29b6f6;
-	--color-accent-hover: #039be5;
+	--color-accent: #c6ff00;
+	--color-accent-hover: #aeea00;
 	--color-danger: #ef4444;
 	--color-danger-hover: #dc2626;
 }
@@ -31,42 +31,32 @@ button, [role="button"] {
 	cursor: pointer;
 }
 
-.volume-slider {
-	appearance: none;
-	-webkit-appearance: none;
-	height: 4px;
-	border-radius: 2px;
-	background: linear-gradient(
-		to right,
-		var(--color-accent) 0%,
-		var(--color-accent) var(--vol, 100%),
-		var(--color-border-hover) var(--vol, 100%),
-		var(--color-border-hover) 100%
-	);
-	outline: none;
+.tick-bar {
+	position: relative;
+	height: 16px;
+	border-radius: 1px;
+	background:
+		linear-gradient(
+			to right,
+			var(--color-accent) var(--fill-pct, 0%),
+			transparent var(--fill-pct, 0%)
+		),
+		repeating-linear-gradient(
+			90deg,
+			var(--color-border-hover) 0px,
+			var(--color-border-hover) 1.5px,
+			transparent 1.5px,
+			transparent 5px
+		);
 }
 
-.volume-slider::-webkit-slider-thumb {
-	-webkit-appearance: none;
-	appearance: none;
-	width: 14px;
-	height: 14px;
-	border-radius: 50%;
-	background: white;
+.tick-bar-input {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	opacity: 0;
 	cursor: pointer;
-	margin-top: -5px;
-}
-
-.volume-slider::-moz-range-thumb {
-	width: 14px;
-	height: 14px;
-	border-radius: 50%;
-	background: white;
-	border: none;
-	cursor: pointer;
-}
-
-.volume-slider::-webkit-slider-runnable-track {
-	height: 4px;
-	border-radius: 2px;
+	margin: 0;
+	padding: 0;
 }

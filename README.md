@@ -22,23 +22,21 @@ The app runs on Infomaniak shared hosting via a managed Node.js runner (`npm sta
 
 ### Deploying updates
 
-```sh
-git pull
-# If the lock file drifted:
-git checkout package-lock.json
-git pull
+The server cannot run `npm run build` (Node.js gets killed by host cgroup limits). **Always build locally and upload the `build/` folder.**
 
+**1. Build locally:**
+```sh
 npm run build
-touch tmp/restart.txt
 ```
+
+**2. Upload `build/` to server via rsync:**
+```sh
+sshpass -p 'YOUR_PASSWORD' rsync -avz --delete -e "ssh -p 22 -o StrictHostKeyChecking=no" build/ "HuM3BkQ5B22_arco@57-109467.ssh.hosting-ik.com:sites/arco.vanderlanth.ch/build/"
+```
+
+The app picks up the new build automatically — no restart needed.
 
 > **Note:** SSH shell is restricted — avoid `&&`, heredocs, and special characters. Run commands one at a time.
-
-### Restarting the app
-
-```sh
-touch tmp/restart.txt
-```
 
 ### Environment variables (`.env`)
 

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { Track } from '$lib/types';
 	import { playerState } from '$lib/stores/playerState.svelte';
+	import { snackbar } from '$lib/stores/snackbar.svelte';
 	import { goto } from '$app/navigation';
 	import Icon from './Icon.svelte';
 
@@ -67,6 +68,15 @@
 			body: JSON.stringify({ trackId: track.id })
 		});
 		if (res.ok) addedTo = new Set([...addedTo, targetPlaylistId]);
+	}
+
+	async function copyLink() {
+		const url = track.spotifyId
+			? `https://open.spotify.com/track/${track.spotifyId}`
+			: `https://youtube.com/watch?v=${track.youtubeId}`;
+		await navigator.clipboard.writeText(url!);
+		snackbar.show('Link copied to clipboard');
+		closeMenu();
 	}
 
 	async function startRadio() {
@@ -176,6 +186,13 @@
 					role="menuitem"
 				>
 					{startingRadio ? 'Starting...' : 'Start radio'}
+				</button>
+				<button
+					onclick={copyLink}
+					class="w-full px-3 py-2 text-left text-sm text-text-primary hover:bg-surface-overlay"
+					role="menuitem"
+				>
+					Copy link
 				</button>
 
 				{#if allPlaylists && allPlaylists.length > 0}

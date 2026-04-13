@@ -4,8 +4,113 @@
 	import { goto, invalidateAll } from '$app/navigation';
 	import Icon from '$lib/components/Icon.svelte';
 	import EmojiPicker from '$lib/components/EmojiPicker.svelte';
+	import { playerState } from '$lib/stores/playerState.svelte';
+	import type { Track } from '$lib/types';
 
 	let { data }: { data: PageData } = $props();
+
+	// --- Search ---
+	interface LastfmResult { title: string; artist: string; albumArt: string | null; }
+
+	let searchQuery = $state('');
+	let searchResults = $state<LastfmResult[]>([]);
+	let searchLoading = $state(false);
+	let searchFocused = $state(false);
+	let searchError = $state<string | null>(null);
+	let queueLoading = $state(false);
+	let searchDebounce: ReturnType<typeof setTimeout>;
+
+	const RECENT_KEY = 'arco:recent-searches';
+	const MAX_RECENT = 5;
+	let recentSearches = $state<LastfmResult[]>([]);
+
+	$effect(() => {
+		try { recentSearches = JSON.parse(localStorage.getItem(RECENT_KEY) ?? '[]'); }
+		catch { recentSearches = []; }
+	});
+
+	function handleSearchInput() {
+		clearTimeout(searchDebounce);
+		searchError = null;
+		if (!searchQuery.trim()) {
+			searchResults = [];
+			searchLoading = false;
+			return;
+		}
+		searchLoading = true;
+		searchDebounce = setTimeout(async () => {
+			try {
+				const res = await fetch(`/api/search-lastfm?q=${encodeURIComponent(searchQuery.trim())}`);
+				if (!res.ok) throw new Error();
+				const data = await res.json();
+				searchResults = data.results ?? [];
+			} catch {
+				searchError = 'Search unavailable';
+				searchResults = [];
+			} finally {
+				searchLoading = false;
+			}
+		}, 300);
+	}
+
+	function saveToRecent(result: LastfmResult) {
+		const deduped = recentSearches.filter(
+			(r) => !(r.title === result.title && r.artist === result.artist)
+		);
+		const next = [result, ...deduped].slice(0, MAX_RECENT);
+		recentSearches = next;
+		try { localStorage.setItem(RECENT_KEY, JSON.stringify(next)); } catch { /* ignore */ }
+	}
+
+	async function fetchAndSetQueue(artist: string, title: string, seed: Track) {
+		try {
+			const res = await fetch(
+				`/api/similar-tracks?artist=${encodeURIComponent(artist)}&track=${encodeURIComponent(title)}`
+			);
+			if (!res.ok) return;
+			const { tracks: similar } = await res.json();
+			if (!similar?.length) return;
+			if (
+				playerState.currentTrack?.title === seed.title &&
+				playerState.currentTrack?.artist === seed.artist
+			) {
+				playerState.setSourceList([seed, ...similar], 0);
+			}
+		} catch { /* swallow — seed still plays */ }
+		finally { queueLoading = false; }
+	}
+
+	function handleResultClick(result: LastfmResult) {
+		saveToRecent(result);
+		searchQuery = '';
+		searchResults = [];
+		searchFocused = false;
+
+		const seed: Track = {
+			id: -1,
+			spotifyId: null,
+			title: result.title,
+			artist: result.artist,
+			album: null,
+			albumArt: result.albumArt,
+			durationMs: null,
+			addedAt: null,
+			youtubeId: null,
+			playlistId: null
+		};
+
+		playerState.playTrack(seed, [seed]);
+		queueLoading = true;
+		fetchAndSetQueue(result.artist, result.title, seed);
+	}
+
+	function handleSearchBlur() {
+		setTimeout(() => { searchFocused = false; }, 150);
+	}
+
+	const showDropdown = $derived(
+		searchFocused && (searchQuery.trim().length > 0 || recentSearches.length > 0)
+	);
 
 	const imported = $derived(page.url.searchParams.get('imported'));
 
@@ -118,6 +223,86 @@
 			</div>
 		</div>
 	</header>
+
+	<!-- Last.fm search -->
+	<div class="relative mb-6">
+		<div class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-muted">
+			<Icon name="search" size={18} />
+		</div>
+		<input
+			type="search"
+			bind:value={searchQuery}
+			oninput={handleSearchInput}
+			onfocus={() => (searchFocused = true)}
+			onblur={handleSearchBlur}
+			placeholder="Search for any song..."
+			class="w-full rounded-lg border border-border bg-surface-raised py-2.5 pl-10 pr-10 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+		/>
+		{#if searchQuery}
+			<button
+				onclick={() => { searchQuery = ''; searchResults = []; searchError = null; }}
+				class="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary transition-colors"
+				aria-label="Clear search"
+			>
+				<Icon name="close" size={16} />
+			</button>
+		{/if}
+
+		{#if showDropdown}
+			<div class="absolute left-0 right-0 top-full z-30 mt-1 overflow-hidden rounded-lg border border-border bg-surface-raised shadow-xl">
+				{#if searchQuery.trim()}
+					{#if searchLoading}
+						<div class="px-4 py-3 text-xs text-text-muted">Searching Last.fm...</div>
+					{:else if searchError}
+						<div class="px-4 py-3 text-xs text-text-muted">{searchError}</div>
+					{:else if searchResults.length === 0}
+						<div class="px-4 py-3 text-xs text-text-muted">No results found</div>
+					{:else}
+						{#each searchResults as result}
+							<button
+								onmousedown={() => handleResultClick(result)}
+								class="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-surface-overlay"
+							>
+								{#if result.albumArt}
+									<img src={result.albumArt} alt="" class="h-9 w-9 shrink-0 rounded object-cover" />
+								{:else}
+									<div class="flex h-9 w-9 shrink-0 items-center justify-center rounded bg-surface-overlay text-text-muted">
+										<Icon name="music" size={14} />
+									</div>
+								{/if}
+								<div class="min-w-0 flex-1">
+									<p class="truncate text-sm font-medium text-text-primary">{result.title}</p>
+									<p class="truncate text-xs text-text-secondary">{result.artist}</p>
+								</div>
+							</button>
+						{/each}
+					{/if}
+				{:else}
+					<div class="px-3 pb-1 pt-2">
+						<p class="text-[10px] font-medium uppercase tracking-wider text-text-muted">Recent</p>
+					</div>
+					{#each recentSearches as recent}
+						<button
+							onmousedown={() => handleResultClick(recent)}
+							class="flex w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-surface-overlay"
+						>
+							{#if recent.albumArt}
+								<img src={recent.albumArt} alt="" class="h-8 w-8 shrink-0 rounded object-cover" />
+							{:else}
+								<div class="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-surface-overlay text-text-muted">
+									<Icon name="music" size={12} />
+								</div>
+							{/if}
+							<div class="min-w-0 flex-1">
+								<p class="truncate text-sm text-text-primary">{recent.title}</p>
+								<p class="truncate text-xs text-text-secondary">{recent.artist}</p>
+							</div>
+						</button>
+					{/each}
+				{/if}
+			</div>
+		{/if}
+	</div>
 
 	{#if imported}
 		<div class="mb-4 rounded-lg border border-accent/30 bg-accent/10 p-3 text-sm text-accent">

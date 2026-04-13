@@ -7,6 +7,41 @@ export interface SimilarTrack {
 	artist: string;
 }
 
+export interface LastfmTrackResult {
+	title: string;
+	artist: string;
+	albumArt: string | null;
+}
+
+export async function searchTracks(query: string, limit = 8): Promise<LastfmTrackResult[]> {
+	const url = new URL(BASE);
+	url.searchParams.set('method', 'track.search');
+	url.searchParams.set('track', query);
+	url.searchParams.set('api_key', LASTFM_API_KEY);
+	url.searchParams.set('format', 'json');
+	url.searchParams.set('limit', String(limit));
+
+	const res = await fetch(url);
+	if (!res.ok) {
+		throw new Error(`Last.fm API error: ${res.status} ${res.statusText}`);
+	}
+
+	const data = await res.json();
+	const tracks = data?.results?.trackmatches?.track;
+	if (!Array.isArray(tracks)) return [];
+
+	return tracks.map((t: { name?: string; artist?: string; image?: { '#text': string; size: string }[] }) => {
+		const images = t.image ?? [];
+		const pick = (size: string) => images.find((i) => i.size === size)?.['#text'];
+		const raw = pick('large') ?? pick('extralarge') ?? pick('medium') ?? '';
+		return {
+			title: t.name ?? 'Unknown',
+			artist: t.artist ?? 'Unknown',
+			albumArt: raw || null
+		};
+	});
+}
+
 export async function getSimilarTracks(
 	artist: string,
 	track: string,
