@@ -110,8 +110,19 @@
 	// --- Media Session action handlers (registered once) ---
 	$effect(() => {
 		if (!('mediaSession' in navigator)) return;
-		navigator.mediaSession.setActionHandler('play', () => { playerState.isPlaying = true; });
-		navigator.mediaSession.setActionHandler('pause', () => { playerState.isPlaying = false; });
+		navigator.mediaSession.setActionHandler('play', () => {
+			playerState.isPlaying = true;
+			// Call play() directly — isPlaying may already be true if the system
+			// interrupted audio without updating our state (e.g. Android audio focus
+			// loss on lock screen), so the $effect won't re-trigger. Calling play()
+			// synchronously here keeps us within the user-gesture call stack.
+			audioEl?.play().catch(() => {});
+		});
+		navigator.mediaSession.setActionHandler('pause', () => {
+			playerState.isPlaying = false;
+			audioEl?.pause();
+			navigator.mediaSession.playbackState = 'paused';
+		});
 		navigator.mediaSession.setActionHandler('nexttrack', () => { playerState.skipNext(); });
 		navigator.mediaSession.setActionHandler('previoustrack', () => { handleSkipPrev(); });
 		try {
