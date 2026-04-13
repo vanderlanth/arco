@@ -218,7 +218,13 @@
 	$effect(() => {
 		if (!audioEl) return;
 		if (playerState.isPlaying) {
-			audioEl.play().catch(() => {});
+			// Skip if the main audio effect is currently loading a new track — it already
+			// called play(). Calling play() here first (with the old/empty src) produces
+			// an aborted Promise that can leave Android Chrome's audio session blocked
+			// until the next user gesture.
+			if (!trackChanging) {
+				audioEl.play().catch(() => {});
+			}
 		} else {
 			audioEl.pause();
 			if ('mediaSession' in navigator) {
