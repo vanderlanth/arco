@@ -64,6 +64,7 @@ async function resolveAudioUrl(videoId: string): Promise<AudioStreamInfo> {
 		'-f', 'bestaudio/best',
 		'--get-url',
 		'--print', '%(ext)s',
+		'--extractor-args', 'youtube:player_client=android,tv_embedded',
 		`https://www.youtube.com/watch?v=${videoId}`
 	]);
 
@@ -102,6 +103,7 @@ export async function getVideoMetadata(videoId: string): Promise<VideoMetadata> 
 		'--no-warnings',
 		'--no-playlist',
 		'--dump-json',
+		'--extractor-args', 'youtube:player_client=tv_embedded',
 		`https://www.youtube.com/watch?v=${videoId}`
 	]);
 	const item = JSON.parse(stdout.trim());
