@@ -70,7 +70,10 @@
 			const ctrl = new AbortController();
 			preloadInFlight.set(key, ctrl);
 
-			fetch(playerState.getStreamUrl(track), { signal: ctrl.signal })
+			// Use /api/stream-blob which pipes through yt-dlp (a subprocess) rather than
+			// Node.js fetch — outbound Node.js requests are blocked on shared hosting.
+			const blobEndpoint = playerState.getStreamUrl(track).replace('/api/stream', '/api/stream-blob');
+			fetch(blobEndpoint, { signal: ctrl.signal })
 				.then((res) => {
 					if (!res.ok) throw new Error(`HTTP ${res.status}`);
 					return res.blob();

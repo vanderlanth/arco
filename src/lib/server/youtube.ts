@@ -12,7 +12,7 @@ const BINARY_CANDIDATES = [
 	'yt-dlp'
 ];
 
-function getBinary(): string {
+export function getBinary(): string {
 	for (const p of BINARY_CANDIDATES) {
 		if (existsSync(p)) return p;
 	}

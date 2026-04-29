@@ -52,39 +52,11 @@ export const GET: RequestHandler = async ({ url }) => {
 		throw error(502, `yt-dlp error: ${detail}`);
 	}
 
-	// Proxy audio through our server — avoids CORS issues with Google Video URLs,
-	// which have no CORS headers and would block the browser's preload fetch().
-	// Same-origin proxy enables blob preloading, which is required for background playback.
-	const range = request.headers.get('Range');
-	const upstreamHeaders: Record<string, string> = {
-		'User-Agent': 'Mozilla/5.0 (Linux; Android 11) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36'
-	};
-	if (range) upstreamHeaders['Range'] = range;
-
-	let upstream: globalThis.Response;
-	try {
-		upstream = await fetch(audio.url, { headers: upstreamHeaders });
-	} catch {
-		throw error(502, 'Failed to fetch audio from upstream');
-	}
-
-	if (!upstream.ok) {
-		throw error(502, `Upstream error: ${upstream.status}`);
-	}
-
-	const headers = new Headers();
-	headers.set('Content-Type', audio.mimeType);
-	headers.set('Accept-Ranges', 'bytes');
-	headers.set('Cache-Control', 'no-store');
-
-	const contentLength = upstream.headers.get('Content-Length');
-	if (contentLength) headers.set('Content-Length', contentLength);
-
-	const contentRange = upstream.headers.get('Content-Range');
-	if (contentRange) headers.set('Content-Range', contentRange);
-
-	return new Response(upstream.body, {
-		status: upstream.status,
-		headers
+	return new Response(null, {
+		status: 302,
+		headers: {
+			Location: audio.url,
+			'Cache-Control': 'no-store'
+		}
 	});
 };
