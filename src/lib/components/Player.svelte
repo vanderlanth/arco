@@ -114,28 +114,11 @@
 	});
 
 
-	// --- Re-assert playback when backgrounding / returning from background / lock screen ---
+	// --- Re-assert playback when returning from background / lock screen ---
 	function handleVisibilityChange() {
+		if (document.visibilityState !== 'visible') return;
 		if (!playerState.currentTrack || !playerState.isPlaying || !audioEl) return;
 
-		if (document.visibilityState === 'hidden') {
-			// App is going to background / lock screen. If the current track's blob is
-			// already cached, swap to it now — a blob survives with no network connection,
-			// a stream URL will be killed by the OS.
-			if (!audioEl.src.startsWith('blob:')) {
-				const key = preloadKey(playerState.currentTrack);
-				const blobUrl = consumePreload(key);
-				if (blobUrl) {
-					const pos = audioEl.currentTime;
-					audioEl.src = blobUrl;
-					audioEl.currentTime = pos;
-					audioEl.play().catch(() => {});
-				}
-			}
-			return;
-		}
-
-		// Returning to foreground
 		updateMediaMetadata(playerState.currentTrack);
 
 		if (audioEl.paused) {
@@ -324,10 +307,6 @@
 	function handleWaiting() {
 		if (!audioEl || !playerState.isPlaying || !playerState.currentTrack) return;
 		playerState.setLoading(true);
-
-		// When hidden (locked screen), the network is throttled and a stream retry will
-		// also stall. Skip the timer and let handleVisibilityChange recover on unlock.
-		if (document.visibilityState === 'hidden') return;
 
 		// If the audio stalls for too long, retry — preferring a preloaded blob over stream
 		const stallTimer = setTimeout(() => {
