@@ -93,11 +93,20 @@
 	// --- Re-assert playback when returning from background / lock screen ---
 	function handleVisibilityChange() {
 		if (document.visibilityState !== 'visible') return;
-		if (!playerState.currentTrack || !playerState.isPlaying) return;
+		if (!playerState.currentTrack || !playerState.isPlaying || !audioEl) return;
 
 		updateMediaMetadata(playerState.currentTrack);
 
-		if (audioEl && audioEl.paused) {
+		if (audioEl.paused) {
+			audioEl.play().catch(() => {});
+		} else if (audioEl.readyState < 3 || playerState.loading) {
+			// Audio is stalled/buffering after coming back from background — reload
+			const track = playerState.currentTrack;
+			const pos = audioEl.currentTime;
+			const key = preloadKey(track);
+			const blobUrl = consumePreload(key);
+			audioEl.src = blobUrl ?? playerState.getStreamUrl(track);
+			audioEl.currentTime = pos;
 			audioEl.play().catch(() => {});
 		}
 	}
@@ -167,7 +176,6 @@
 
 	// --- Main audio source management ---
 	let lastTrackQueueId = '';
-	let trackChanging = false;
 	let srcSetByHandler = false;
 
 	$effect(() => {
@@ -179,7 +187,6 @@
 		if (!url || !current || queueId === lastTrackQueueId) return;
 
 		lastTrackQueueId = queueId;
-		trackChanging = true;
 
 		if (srcSetByHandler) {
 			srcSetByHandler = false;
@@ -218,13 +225,7 @@
 	$effect(() => {
 		if (!audioEl) return;
 		if (playerState.isPlaying) {
-			// Skip if the main audio effect is currently loading a new track — it already
-			// called play(). Calling play() here first (with the old/empty src) produces
-			// an aborted Promise that can leave Android Chrome's audio session blocked
-			// until the next user gesture.
-			if (!trackChanging) {
-				audioEl.play().catch(() => {});
-			}
+			audioEl.play().catch(() => {});
 		} else {
 			audioEl.pause();
 			if ('mediaSession' in navigator) {
@@ -267,7 +268,6 @@
 	}
 
 	function handlePlaying() {
-		trackChanging = false;
 		if ('mediaSession' in navigator) {
 			navigator.mediaSession.playbackState = 'playing';
 		}
@@ -285,15 +285,20 @@
 		if (!audioEl || !playerState.isPlaying || !playerState.currentTrack) return;
 		playerState.setLoading(true);
 
-		// If the audio stalls for too long in background, retry with a fresh source
+		// When hidden (locked screen), the network is throttled and a stream retry will
+		// also stall. Skip the timer and let handleVisibilityChange recover on unlock.
+		if (document.visibilityState === 'hidden') return;
+
+		// If the audio stalls for too long, retry — preferring a preloaded blob over stream
 		const stallTimer = setTimeout(() => {
-			if (!audioEl || !audioEl.paused || audioEl.readyState >= 3) return;
+			if (!audioEl || audioEl.readyState >= 3) return;
 			if (stallRetries >= MAX_STALL_RETRIES) { stallRetries = 0; return; }
 			stallRetries++;
 			const track = playerState.currentTrack;
 			if (!track) return;
 			const pos = audioEl.currentTime;
-			audioEl.src = playerState.getStreamUrl(track);
+			const blobUrl = consumePreload(preloadKey(track));
+			audioEl.src = blobUrl ?? playerState.getStreamUrl(track);
 			audioEl.currentTime = pos;
 			audioEl.play().catch(() => {});
 		}, 8000);
@@ -356,10 +361,32 @@
 	async function copyCurrentTrackLink() {
 		const track = playerState.currentTrack;
 		if (!track) return;
-		const url = track.spotifyId
-			? `https://open.spotify.com/track/${track.spotifyId}`
-			: `https://youtube.com/watch?v=${track.youtubeId}`;
-		await navigator.clipboard.writeText(url!);
+
+		if (track.spotifyId) {
+			await navigator.clipboard.writeText(`https://open.spotify.com/track/${track.spotifyId}`);
+			snackbar.show('Link copied to clipboard');
+			return;
+		}
+
+		let youtubeId = track.youtubeId;
+
+		if (!youtubeId) {
+			try {
+				const res = await fetch(`/api/resolve?q=${encodeURIComponent(`${track.artist} - ${track.title}`)}`);
+				if (res.ok) {
+					const data = await res.json();
+					youtubeId = data.videoId ?? null;
+					if (youtubeId) track.youtubeId = youtubeId;
+				}
+			} catch { /* fall through */ }
+		}
+
+		if (!youtubeId) {
+			snackbar.show('Could not resolve link');
+			return;
+		}
+
+		await navigator.clipboard.writeText(`https://youtube.com/watch?v=${youtubeId}`);
 		snackbar.show('Link copied to clipboard');
 	}
 
@@ -683,24 +710,25 @@
 				</div>
 
 				<div class="flex items-center gap-0.5">
-					<div class="mr-1 hidden items-center gap-1 md:flex">
-						<button
-							onclick={toggleMute}
-							class="rounded-full p-1.5 text-text-secondary hover:bg-surface-overlay"
-							aria-label={muted || volume === 0 ? 'Unmute' : 'Mute'}
-						>
-							{#if muted || volume === 0}
-								<Icon name="volume-mute" size={16} />
-							{:else if volume < 0.5}
-								<Icon name="volume-low" size={16} />
-							{:else}
-								<Icon name="volume-up" size={16} />
-							{/if}
-						</button>
+					<div class="mr-1 hidden md:flex">
 						<div
-							class="tick-bar w-20"
+							class="vol-capsule"
 							style="--fill-pct: {(muted ? 0 : volume) * 100}%"
 						>
+							<div class="vol-capsule-fill"></div>
+							<button
+								onclick={toggleMute}
+								class="vol-capsule-icon"
+								aria-label={muted || volume === 0 ? 'Unmute' : 'Mute'}
+							>
+								{#if muted || volume === 0}
+									<Icon name="volume-mute" size={13} />
+								{:else if volume < 0.5}
+									<Icon name="volume-low" size={13} />
+								{:else}
+									<Icon name="volume-up" size={13} />
+								{/if}
+							</button>
 							<input
 								type="range"
 								min="0"
@@ -708,7 +736,7 @@
 								step="0.02"
 								value={muted ? 0 : volume}
 								oninput={handleVolumeChange}
-								class="tick-bar-input"
+								class="vol-capsule-input"
 								aria-label="Volume"
 							/>
 						</div>
@@ -752,23 +780,61 @@
 	{:else}
 		<!-- DESKTOP: Side panel player -->
 		<aside class="desktop-panel flex h-screen w-[33vw] min-w-[360px] shrink-0 flex-col border-l border-border bg-surface">
-			<!-- Queue toggle (top-right) -->
-			<div class="flex items-center justify-end gap-2 p-4">
-				<button
-					onclick={copyCurrentTrackLink}
-					class="text-text-muted hover:text-text-primary"
-					aria-label="Copy link"
-				>
-					<Icon name="link" size={20} />
-				</button>
-				<button
-					onclick={() => (showQueue = !showQueue)}
-					class="text-text-muted hover:text-text-primary"
-					class:text-accent={showQueue}
-					aria-label={showQueue ? 'Close queue' : 'Open queue'}
-				>
-					<Icon name="playlist" size={24} />
-				</button>
+			<!-- Top bar: volume (left) + actions (right) -->
+			<div class="flex items-center justify-between gap-2 p-4">
+				<!-- Compact volume control -->
+				{#if !showQueue}
+					<div
+						class="vol-capsule"
+						style="--fill-pct: {(muted ? 0 : volume) * 100}%"
+					>
+						<div class="vol-capsule-fill"></div>
+						<button
+							onclick={toggleMute}
+							class="vol-capsule-icon"
+							aria-label={muted || volume === 0 ? 'Unmute' : 'Mute'}
+						>
+							{#if muted || volume === 0}
+								<Icon name="volume-mute" size={13} />
+							{:else if volume < 0.5}
+								<Icon name="volume-low" size={13} />
+							{:else}
+								<Icon name="volume-up" size={13} />
+							{/if}
+						</button>
+						<input
+							type="range"
+							min="0"
+							max="1"
+							step="0.02"
+							value={muted ? 0 : volume}
+							oninput={handleVolumeChange}
+							class="vol-capsule-input"
+							aria-label="Volume"
+						/>
+					</div>
+				{/if}
+
+				<!-- Right actions -->
+				<div class="ml-auto flex items-center gap-2">
+					{#if !showQueue}
+						<button
+							onclick={copyCurrentTrackLink}
+							class="text-text-muted hover:text-text-primary"
+							aria-label="Copy link"
+						>
+							<Icon name="share" size={20} />
+						</button>
+					{/if}
+					<button
+						onclick={() => (showQueue = !showQueue)}
+						class="text-text-muted hover:text-text-primary"
+						class:text-accent={showQueue}
+						aria-label={showQueue ? 'Close queue' : 'Open queue'}
+					>
+						<Icon name={showQueue ? 'close' : 'playlist'} size={24} />
+					</button>
+				</div>
 			</div>
 
 			{#if showQueue}
@@ -874,38 +940,7 @@
 						</div>
 					</div>
 
-					<!-- Volume -->
-					<div class="flex w-full items-center gap-3">
-						<button
-							onclick={toggleMute}
-							class="shrink-0 text-text-secondary hover:text-text-primary"
-							aria-label={muted || volume === 0 ? 'Unmute' : 'Mute'}
-						>
-							{#if muted || volume === 0}
-								<Icon name="volume-mute" size={18} />
-							{:else if volume < 0.5}
-								<Icon name="volume-low" size={18} />
-							{:else}
-								<Icon name="volume-up" size={18} />
-							{/if}
-						</button>
-						<div
-							class="tick-bar flex-1"
-							style="--fill-pct: {(muted ? 0 : volume) * 100}%"
-						>
-							<input
-								type="range"
-								min="0"
-								max="1"
-								step="0.02"
-								value={muted ? 0 : volume}
-								oninput={handleVolumeChange}
-								class="tick-bar-input"
-								aria-label="Volume"
-							/>
-						</div>
 					</div>
-				</div>
 			{/if}
 		</aside>
 	{/if}
@@ -943,5 +978,56 @@
 		0% { width: 0%; margin-left: 0; }
 		50% { width: 40%; margin-left: 30%; }
 		100% { width: 0%; margin-left: 100%; }
+	}
+
+	/* iOS capsule volume control */
+	.vol-capsule {
+		position: relative;
+		display: flex;
+		align-items: center;
+		width: 96px;
+		height: 30px;
+		border-radius: 999px;
+		background: var(--color-surface-overlay);
+		overflow: hidden;
+		flex-shrink: 0;
+		isolation: isolate;
+	}
+
+	.vol-capsule-fill {
+		position: absolute;
+		left: 0;
+		top: 0;
+		height: 100%;
+		width: var(--fill-pct, 0%);
+		background: var(--color-accent);
+		border-radius: 999px;
+		pointer-events: none;
+		transition: width 60ms linear;
+	}
+
+	.vol-capsule-icon {
+		position: relative;
+		z-index: 1;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 30px;
+		height: 100%;
+		color: white;
+		mix-blend-mode: difference;
+		flex-shrink: 0;
+	}
+
+	.vol-capsule-input {
+		position: absolute;
+		inset: 0;
+		width: 100%;
+		height: 100%;
+		opacity: 0;
+		cursor: pointer;
+		z-index: 2;
+		margin: 0;
+		padding: 0;
 	}
 </style>

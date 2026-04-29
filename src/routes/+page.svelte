@@ -10,56 +10,134 @@
 	let { data }: { data: PageData } = $props();
 
 	// --- Search ---
-	interface LastfmResult { title: string; artist: string; albumArt: string | null; }
+	interface LastfmTrackResult { title: string; artist: string; albumArt: string | null; }
+	interface LastfmArtistResult { name: string; imageUrl: string | null; listeners: string | null; }
+	interface LastfmAlbumResult { name: string; artist: string; imageUrl: string | null; }
+	interface PlaylistTrackResult {
+		id: number;
+		title: string;
+		artist: string;
+		album: string | null;
+		albumArt: string | null;
+		playlistId: number;
+		playlistName: string;
+		playlistSlug: string;
+	}
 
 	let searchQuery = $state('');
-	let searchResults = $state<LastfmResult[]>([]);
-	let searchLoading = $state(false);
 	let searchFocused = $state(false);
+	let searchLoading = $state(false);
 	let searchError = $state<string | null>(null);
 	let queueLoading = $state(false);
 	let searchDebounce: ReturnType<typeof setTimeout>;
+	let searchInputEl = $state<HTMLInputElement | null>(null);
 
-	const RECENT_KEY = 'arco:recent-searches';
-	const MAX_RECENT = 5;
-	let recentSearches = $state<LastfmResult[]>([]);
+	const RECENT_KEY = 'arco:recent-searches-v2';
+	const MAX_RECENT = 8;
+	let recentSearches = $state<string[]>([]);
 
 	$effect(() => {
 		try { recentSearches = JSON.parse(localStorage.getItem(RECENT_KEY) ?? '[]'); }
 		catch { recentSearches = []; }
 	});
 
+	function saveToRecent(query: string) {
+		const q = query.trim();
+		if (!q) return;
+		const deduped = recentSearches.filter((r) => r.toLowerCase() !== q.toLowerCase());
+		const next = [q, ...deduped].slice(0, MAX_RECENT);
+		recentSearches = next;
+		try { localStorage.setItem(RECENT_KEY, JSON.stringify(next)); } catch { /* ignore */ }
+	}
+
+	function removeFromRecent(query: string) {
+		const next = recentSearches.filter((r) => r !== query);
+		recentSearches = next;
+		try { localStorage.setItem(RECENT_KEY, JSON.stringify(next)); } catch { /* ignore */ }
+	}
+
+	function applyRecentSearch(query: string) {
+		searchQuery = query;
+		handleSearchInput();
+		searchInputEl?.focus();
+	}
+
+	let playlistTrackResults = $state<PlaylistTrackResult[]>([]);
+	let lastfmTrackResults = $state<LastfmTrackResult[]>([]);
+	let artistResults = $state<LastfmArtistResult[]>([]);
+	let albumResults = $state<LastfmAlbumResult[]>([]);
+
+	let showMorePlaylistTracks = $state(false);
+	let showMoreLastfmTracks = $state(false);
+	let showMoreArtists = $state(false);
+	let showMoreAlbums = $state(false);
+
+	const searchMode = $derived(searchFocused || searchQuery.trim().length > 0);
+
+	const hasResults = $derived(
+		playlistTrackResults.length > 0 ||
+		lastfmTrackResults.length > 0 ||
+		artistResults.length > 0 ||
+		albumResults.length > 0
+	);
+
+	function clearSearch() {
+		searchQuery = '';
+		searchError = null;
+		playlistTrackResults = [];
+		lastfmTrackResults = [];
+		artistResults = [];
+		albumResults = [];
+		showMorePlaylistTracks = false;
+		showMoreLastfmTracks = false;
+		showMoreArtists = false;
+		showMoreAlbums = false;
+	}
+
 	function handleSearchInput() {
 		clearTimeout(searchDebounce);
 		searchError = null;
+		showMorePlaylistTracks = false;
+		showMoreLastfmTracks = false;
+		showMoreArtists = false;
+		showMoreAlbums = false;
 		if (!searchQuery.trim()) {
-			searchResults = [];
+			playlistTrackResults = [];
+			lastfmTrackResults = [];
+			artistResults = [];
+			albumResults = [];
 			searchLoading = false;
 			return;
 		}
 		searchLoading = true;
 		searchDebounce = setTimeout(async () => {
 			try {
-				const res = await fetch(`/api/search-lastfm?q=${encodeURIComponent(searchQuery.trim())}`);
+				const res = await fetch(`/api/search-advanced?q=${encodeURIComponent(searchQuery.trim())}`);
 				if (!res.ok) throw new Error();
-				const data = await res.json();
-				searchResults = data.results ?? [];
+				const result = await res.json();
+				playlistTrackResults = result.playlistTracks ?? [];
+				lastfmTrackResults = result.lastfmTracks ?? [];
+				artistResults = result.artists ?? [];
+				albumResults = result.albums ?? [];
+				saveToRecent(searchQuery);
 			} catch {
 				searchError = 'Search unavailable';
-				searchResults = [];
+				playlistTrackResults = [];
+				lastfmTrackResults = [];
+				artistResults = [];
+				albumResults = [];
 			} finally {
 				searchLoading = false;
 			}
 		}, 300);
 	}
 
-	function saveToRecent(result: LastfmResult) {
-		const deduped = recentSearches.filter(
-			(r) => !(r.title === result.title && r.artist === result.artist)
-		);
-		const next = [result, ...deduped].slice(0, MAX_RECENT);
-		recentSearches = next;
-		try { localStorage.setItem(RECENT_KEY, JSON.stringify(next)); } catch { /* ignore */ }
+	function handleSearchKeydown(e: KeyboardEvent) {
+		if (e.key === 'Escape') {
+			clearSearch();
+			searchFocused = false;
+			searchInputEl?.blur();
+		}
 	}
 
 	async function fetchAndSetQueue(artist: string, title: string, seed: Track) {
@@ -80,37 +158,54 @@
 		finally { queueLoading = false; }
 	}
 
-	function handleResultClick(result: LastfmResult) {
-		saveToRecent(result);
-		searchQuery = '';
-		searchResults = [];
-		searchFocused = false;
-
+	function playTrackResult(title: string, artist: string, albumArt: string | null, album: string | null = null) {
 		const seed: Track = {
 			id: -1,
 			spotifyId: null,
-			title: result.title,
-			artist: result.artist,
-			album: null,
-			albumArt: result.albumArt,
+			title,
+			artist,
+			album,
+			albumArt,
 			durationMs: null,
 			addedAt: null,
 			youtubeId: null,
 			playlistId: null
 		};
+		playerState.playTrack(seed, [seed]);
+		queueLoading = true;
+		fetchAndSetQueue(artist, title, seed);
+	}
 
+	function handleLastfmTrackClick(result: LastfmTrackResult) {
+		playTrackResult(result.title, result.artist, result.albumArt);
+	}
+
+	function handlePlaylistTrackClick(result: PlaylistTrackResult) {
+		const seed: Track = {
+			id: result.id,
+			spotifyId: null,
+			title: result.title,
+			artist: result.artist,
+			album: result.album,
+			albumArt: result.albumArt,
+			durationMs: null,
+			addedAt: null,
+			youtubeId: null,
+			playlistId: result.playlistId
+		};
 		playerState.playTrack(seed, [seed]);
 		queueLoading = true;
 		fetchAndSetQueue(result.artist, result.title, seed);
 	}
 
-	function handleSearchBlur() {
-		setTimeout(() => { searchFocused = false; }, 150);
+	function handleArtistClick(artist: LastfmArtistResult) {
+		searchQuery = artist.name;
+		handleSearchInput();
 	}
 
-	const showDropdown = $derived(
-		searchFocused && (searchQuery.trim().length > 0 || recentSearches.length > 0)
-	);
+	function handleAlbumClick(album: LastfmAlbumResult) {
+		playTrackResult(album.name, album.artist, album.imageUrl, album.name);
+	}
 
 	const imported = $derived(page.url.searchParams.get('imported'));
 
@@ -224,81 +319,237 @@
 		</div>
 	</header>
 
-	<!-- Last.fm search -->
-	<div class="relative mb-6">
-		<div class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-muted">
-			<Icon name="search" size={18} />
+	<!-- Search -->
+	<div class="mb-6">
+		<div class="relative">
+			<div class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-muted">
+				<Icon name="search" size={18} />
+			</div>
+			<input
+				bind:this={searchInputEl}
+				type="search"
+				bind:value={searchQuery}
+				oninput={handleSearchInput}
+				onfocus={() => (searchFocused = true)}
+				onblur={() => (searchFocused = false)}
+				onkeydown={handleSearchKeydown}
+				placeholder="Search songs, artists, albums..."
+				class="w-full rounded-lg border border-border bg-surface-raised py-2.5 pl-10 pr-10 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent transition-colors"
+			/>
+			{#if searchQuery}
+				<button
+					onclick={() => { clearSearch(); searchInputEl?.focus(); }}
+					class="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary transition-colors"
+					aria-label="Clear search"
+				>
+					<Icon name="close" size={16} />
+				</button>
+			{/if}
 		</div>
-		<input
-			type="search"
-			bind:value={searchQuery}
-			oninput={handleSearchInput}
-			onfocus={() => (searchFocused = true)}
-			onblur={handleSearchBlur}
-			placeholder="Search for any song..."
-			class="w-full rounded-lg border border-border bg-surface-raised py-2.5 pl-10 pr-10 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
-		/>
-		{#if searchQuery}
-			<button
-				onclick={() => { searchQuery = ''; searchResults = []; searchError = null; }}
-				class="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary transition-colors"
-				aria-label="Clear search"
-			>
-				<Icon name="close" size={16} />
-			</button>
+
+		{#if searchMode && !searchQuery.trim() && recentSearches.length > 0}
+			<div class="mt-4">
+				<div class="mb-2 flex items-center justify-between">
+					<p class="text-[10px] font-semibold uppercase tracking-wider text-text-muted">Recent searches</p>
+					<button
+						onclick={() => { recentSearches = []; try { localStorage.removeItem(RECENT_KEY); } catch { /* ignore */ } }}
+						class="text-[10px] text-text-muted transition-colors hover:text-text-secondary"
+					>
+						Clear all
+					</button>
+				</div>
+				<div class="space-y-0.5">
+					{#each recentSearches as query}
+						<div class="group flex items-center gap-2 rounded-lg px-2 py-1.5 transition-colors hover:bg-surface-overlay">
+							<button
+								onclick={() => applyRecentSearch(query)}
+								class="flex min-w-0 flex-1 items-center gap-3 text-left"
+							>
+								<Icon name="search" size={14} class="shrink-0 text-text-muted" />
+								<span class="truncate text-sm text-text-primary">{query}</span>
+							</button>
+							<button
+								onclick={() => removeFromRecent(query)}
+								class="shrink-0 p-0.5 text-text-muted opacity-0 transition-opacity group-hover:opacity-100 hover:text-text-secondary"
+								aria-label="Remove from recent"
+							>
+								<Icon name="close" size={12} />
+							</button>
+						</div>
+					{/each}
+				</div>
+			</div>
 		{/if}
 
-		{#if showDropdown}
-			<div class="absolute left-0 right-0 top-full z-30 mt-1 overflow-hidden rounded-lg border border-border bg-surface-raised shadow-xl">
-				{#if searchQuery.trim()}
-					{#if searchLoading}
-						<div class="px-4 py-3 text-xs text-text-muted">Searching Last.fm...</div>
-					{:else if searchError}
-						<div class="px-4 py-3 text-xs text-text-muted">{searchError}</div>
-					{:else if searchResults.length === 0}
-						<div class="px-4 py-3 text-xs text-text-muted">No results found</div>
-					{:else}
-						{#each searchResults as result}
-							<button
-								onmousedown={() => handleResultClick(result)}
-								class="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-surface-overlay"
-							>
-								{#if result.albumArt}
-									<img src={result.albumArt} alt="" class="h-9 w-9 shrink-0 rounded object-cover" />
-								{:else}
-									<div class="flex h-9 w-9 shrink-0 items-center justify-center rounded bg-surface-overlay text-text-muted">
-										<Icon name="music" size={14} />
+		{#if searchMode && searchQuery.trim()}
+			<div class="mt-4 space-y-6">
+				{#if searchLoading}
+					<div class="space-y-6">
+						{#each [0, 1, 2, 3] as _}
+							<div>
+								<div class="mb-2 h-3 w-28 animate-pulse rounded bg-surface-overlay"></div>
+								{#each [0, 1, 2] as __}
+									<div class="flex items-center gap-3 py-2">
+										<div class="h-10 w-10 shrink-0 animate-pulse rounded-lg bg-surface-overlay"></div>
+										<div class="flex-1 space-y-1.5">
+											<div class="h-3 w-2/3 animate-pulse rounded bg-surface-overlay"></div>
+											<div class="h-2.5 w-1/3 animate-pulse rounded bg-surface-overlay"></div>
+										</div>
 									</div>
-								{/if}
-								<div class="min-w-0 flex-1">
-									<p class="truncate text-sm font-medium text-text-primary">{result.title}</p>
-									<p class="truncate text-xs text-text-secondary">{result.artist}</p>
-								</div>
-							</button>
-						{/each}
-					{/if}
-				{:else}
-					<div class="px-3 pb-1 pt-2">
-						<p class="text-[10px] font-medium uppercase tracking-wider text-text-muted">Recent</p>
-					</div>
-					{#each recentSearches as recent}
-						<button
-							onmousedown={() => handleResultClick(recent)}
-							class="flex w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-surface-overlay"
-						>
-							{#if recent.albumArt}
-								<img src={recent.albumArt} alt="" class="h-8 w-8 shrink-0 rounded object-cover" />
-							{:else}
-								<div class="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-surface-overlay text-text-muted">
-									<Icon name="music" size={12} />
-								</div>
-							{/if}
-							<div class="min-w-0 flex-1">
-								<p class="truncate text-sm text-text-primary">{recent.title}</p>
-								<p class="truncate text-xs text-text-secondary">{recent.artist}</p>
+								{/each}
 							</div>
-						</button>
-					{/each}
+						{/each}
+					</div>
+				{:else if searchError}
+					<p class="text-sm text-text-muted">{searchError}</p>
+				{:else if !hasResults}
+					<p class="text-sm text-text-muted">No results for "{searchQuery}"</p>
+				{:else}
+
+					<!-- Songs from your playlists -->
+					{#if playlistTrackResults.length > 0}
+						<section>
+							<h2 class="mb-2 text-[10px] font-semibold uppercase tracking-wider text-text-muted">From your playlists</h2>
+							<div class="space-y-0.5">
+								{#each (showMorePlaylistTracks ? playlistTrackResults : playlistTrackResults.slice(0, 10)) as track (track.id)}
+									<button
+										onclick={() => handlePlaylistTrackClick(track)}
+										class="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors hover:bg-surface-overlay"
+									>
+										{#if track.albumArt}
+											<img src={track.albumArt} alt="" class="h-10 w-10 shrink-0 rounded-lg object-cover" />
+										{:else}
+											<div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-surface-overlay text-text-muted">
+												<Icon name="music" size={14} />
+											</div>
+										{/if}
+										<div class="min-w-0 flex-1">
+											<p class="truncate text-sm font-medium text-text-primary">{track.title}</p>
+											<p class="truncate text-xs text-text-secondary">{track.artist}</p>
+										</div>
+										<span class="shrink-0 rounded-md border border-border px-1.5 py-0.5 text-[10px] text-text-muted">{track.playlistName}</span>
+									</button>
+								{/each}
+							</div>
+							{#if playlistTrackResults.length > 10}
+								<button
+									onclick={() => (showMorePlaylistTracks = !showMorePlaylistTracks)}
+									class="mt-1 w-full rounded-lg py-2 text-xs text-text-muted transition-colors hover:bg-surface-overlay hover:text-text-secondary"
+								>
+									{showMorePlaylistTracks ? 'Show less' : `Show ${playlistTrackResults.length - 10} more`}
+								</button>
+							{/if}
+						</section>
+					{/if}
+
+					<!-- Songs from Last.fm -->
+					{#if lastfmTrackResults.length > 0}
+						<section>
+							<h2 class="mb-2 text-[10px] font-semibold uppercase tracking-wider text-text-muted">Songs</h2>
+							<div class="space-y-0.5">
+								{#each (showMoreLastfmTracks ? lastfmTrackResults : lastfmTrackResults.slice(0, 10)) as result, i (i)}
+									<button
+										onclick={() => handleLastfmTrackClick(result)}
+										class="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors hover:bg-surface-overlay"
+									>
+										{#if result.albumArt}
+											<img src={result.albumArt} alt="" class="h-10 w-10 shrink-0 rounded-lg object-cover" />
+										{:else}
+											<div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-surface-overlay text-text-muted">
+												<Icon name="music" size={14} />
+											</div>
+										{/if}
+										<div class="min-w-0 flex-1">
+											<p class="truncate text-sm font-medium text-text-primary">{result.title}</p>
+											<p class="truncate text-xs text-text-secondary">{result.artist}</p>
+										</div>
+									</button>
+								{/each}
+							</div>
+							{#if lastfmTrackResults.length > 10}
+								<button
+									onclick={() => (showMoreLastfmTracks = !showMoreLastfmTracks)}
+									class="mt-1 w-full rounded-lg py-2 text-xs text-text-muted transition-colors hover:bg-surface-overlay hover:text-text-secondary"
+								>
+									{showMoreLastfmTracks ? 'Show less' : `Show ${lastfmTrackResults.length - 10} more`}
+								</button>
+							{/if}
+						</section>
+					{/if}
+
+					<!-- Artists -->
+					{#if artistResults.length > 0}
+						<section>
+							<h2 class="mb-2 text-[10px] font-semibold uppercase tracking-wider text-text-muted">Artists</h2>
+							<div class="space-y-0.5">
+								{#each (showMoreArtists ? artistResults : artistResults.slice(0, 10)) as artist, i (i)}
+									<button
+										onclick={() => handleArtistClick(artist)}
+										class="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors hover:bg-surface-overlay"
+									>
+										{#if artist.imageUrl}
+											<img src={artist.imageUrl} alt="" class="h-10 w-10 shrink-0 rounded-full object-cover" />
+										{:else}
+											<div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-surface-overlay text-text-muted">
+												<Icon name="music" size={14} />
+											</div>
+										{/if}
+										<div class="min-w-0 flex-1">
+											<p class="truncate text-sm font-medium text-text-primary">{artist.name}</p>
+											{#if artist.listeners}
+												<p class="truncate text-xs text-text-muted">{Number(artist.listeners).toLocaleString()} listeners</p>
+											{/if}
+										</div>
+										<Icon name="search" size={12} class="shrink-0 text-text-muted" />
+									</button>
+								{/each}
+							</div>
+							{#if artistResults.length > 10}
+								<button
+									onclick={() => (showMoreArtists = !showMoreArtists)}
+									class="mt-1 w-full rounded-lg py-2 text-xs text-text-muted transition-colors hover:bg-surface-overlay hover:text-text-secondary"
+								>
+									{showMoreArtists ? 'Show less' : `Show ${artistResults.length - 10} more`}
+								</button>
+							{/if}
+						</section>
+					{/if}
+
+					<!-- Albums -->
+					{#if albumResults.length > 0}
+						<section>
+							<h2 class="mb-2 text-[10px] font-semibold uppercase tracking-wider text-text-muted">Albums</h2>
+							<div class="space-y-0.5">
+								{#each (showMoreAlbums ? albumResults : albumResults.slice(0, 10)) as album, i (i)}
+									<button
+										onclick={() => handleAlbumClick(album)}
+										class="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors hover:bg-surface-overlay"
+									>
+										{#if album.imageUrl}
+											<img src={album.imageUrl} alt="" class="h-10 w-10 shrink-0 rounded-lg object-cover" />
+										{:else}
+											<div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-surface-overlay text-text-muted">
+												<Icon name="music" size={14} />
+											</div>
+										{/if}
+										<div class="min-w-0 flex-1">
+											<p class="truncate text-sm font-medium text-text-primary">{album.name}</p>
+											<p class="truncate text-xs text-text-secondary">{album.artist}</p>
+										</div>
+									</button>
+								{/each}
+							</div>
+							{#if albumResults.length > 10}
+								<button
+									onclick={() => (showMoreAlbums = !showMoreAlbums)}
+									class="mt-1 w-full rounded-lg py-2 text-xs text-text-muted transition-colors hover:bg-surface-overlay hover:text-text-secondary"
+								>
+									{showMoreAlbums ? 'Show less' : `Show ${albumResults.length - 10} more`}
+								</button>
+							{/if}
+						</section>
+					{/if}
+
 				{/if}
 			</div>
 		{/if}
@@ -309,6 +560,8 @@
 			Successfully imported {imported} tracks.
 		</div>
 	{/if}
+
+	{#if !searchMode}
 
 	{#if data.playlists.length === 0}
 		<div class="py-20 text-center">
@@ -399,6 +652,8 @@
 			{/each}
 			</div>
 		</section>
+	{/if}
+
 	{/if}
 </main>
 

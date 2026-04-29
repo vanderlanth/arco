@@ -29,6 +29,7 @@ body {
 
 button, [role="button"] {
 	cursor: pointer;
+	touch-action: manipulation;
 }
 
 .tick-bar {

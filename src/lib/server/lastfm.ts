@@ -42,6 +42,72 @@ export async function searchTracks(query: string, limit = 8): Promise<LastfmTrac
 	});
 }
 
+export interface LastfmArtistResult {
+	name: string;
+	imageUrl: string | null;
+	listeners: string | null;
+}
+
+export interface LastfmAlbumResult {
+	name: string;
+	artist: string;
+	imageUrl: string | null;
+}
+
+export async function searchArtists(query: string, limit = 10): Promise<LastfmArtistResult[]> {
+	const url = new URL(BASE);
+	url.searchParams.set('method', 'artist.search');
+	url.searchParams.set('artist', query);
+	url.searchParams.set('api_key', LASTFM_API_KEY);
+	url.searchParams.set('format', 'json');
+	url.searchParams.set('limit', String(limit));
+
+	const res = await fetch(url);
+	if (!res.ok) throw new Error(`Last.fm API error: ${res.status} ${res.statusText}`);
+
+	const data = await res.json();
+	const artists = data?.results?.artistmatches?.artist;
+	if (!Array.isArray(artists)) return [];
+
+	return artists.map((a: { name?: string; listeners?: string; image?: { '#text': string; size: string }[] }) => {
+		const images = a.image ?? [];
+		const pick = (size: string) => images.find((i) => i.size === size)?.['#text'];
+		const raw = pick('large') ?? pick('extralarge') ?? pick('medium') ?? '';
+		return {
+			name: a.name ?? 'Unknown',
+			imageUrl: raw || null,
+			listeners: a.listeners ?? null
+		};
+	});
+}
+
+export async function searchAlbums(query: string, limit = 10): Promise<LastfmAlbumResult[]> {
+	const url = new URL(BASE);
+	url.searchParams.set('method', 'album.search');
+	url.searchParams.set('album', query);
+	url.searchParams.set('api_key', LASTFM_API_KEY);
+	url.searchParams.set('format', 'json');
+	url.searchParams.set('limit', String(limit));
+
+	const res = await fetch(url);
+	if (!res.ok) throw new Error(`Last.fm API error: ${res.status} ${res.statusText}`);
+
+	const data = await res.json();
+	const albums = data?.results?.albummatches?.album;
+	if (!Array.isArray(albums)) return [];
+
+	return albums.map((a: { name?: string; artist?: string; image?: { '#text': string; size: string }[] }) => {
+		const images = a.image ?? [];
+		const pick = (size: string) => images.find((i) => i.size === size)?.['#text'];
+		const raw = pick('large') ?? pick('extralarge') ?? pick('medium') ?? '';
+		return {
+			name: a.name ?? 'Unknown',
+			artist: a.artist ?? 'Unknown',
+			imageUrl: raw || null
+		};
+	});
+}
+
 export async function getSimilarTracks(
 	artist: string,
 	track: string,

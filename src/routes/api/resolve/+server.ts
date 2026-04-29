@@ -8,6 +8,7 @@ import { getAudioUrl, searchYouTube } from '$lib/server/youtube';
 export const GET: RequestHandler = async ({ url }) => {
 	const trackId = url.searchParams.get('id');
 	const videoIdParam = url.searchParams.get('videoId');
+	const searchQuery = url.searchParams.get('q');
 
 	// Direct YouTube video ID (for YouTube search results)
 	if (videoIdParam) {
@@ -15,7 +16,14 @@ export const GET: RequestHandler = async ({ url }) => {
 		return json({ audioUrl: audio.url, mimeType: audio.mimeType, videoId: videoIdParam });
 	}
 
-	if (!trackId) throw error(400, 'Missing track id or videoId');
+	// Text search — return just the video ID without fetching audio URL
+	if (searchQuery) {
+		const results = await searchYouTube(searchQuery, 1);
+		if (results.length === 0) throw error(404, 'No YouTube match found');
+		return json({ videoId: results[0].videoId });
+	}
+
+	if (!trackId) throw error(400, 'Missing track id, videoId, or q');
 
 	const track = await db.query.tracks.findFirst({
 		where: eq(tracks.id, Number(trackId))

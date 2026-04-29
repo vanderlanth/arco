@@ -17,7 +17,7 @@
 	let visibleQueue = $derived(playerState.queue.slice(0, MAX_VISIBLE));
 	let remainingCount = $derived(Math.max(0, playerState.queue.length - MAX_VISIBLE));
 	let implicitUpcoming = $derived(
-		playerState.shuffled ? playerState.getImplicitUpcoming(SHUFFLE_PREVIEW) : []
+		playerState.getImplicitUpcoming(playerState.shuffled ? SHUFFLE_PREVIEW : MAX_VISIBLE)
 	);
 
 	let dragItems = $state<Array<{ id: string; [key: string]: any }>>([]);
@@ -150,49 +150,76 @@
 		{/if}
 	{/if}
 
-	<!-- Shuffled upcoming (implicit next tracks when shuffle is on) -->
+	<!-- Upcoming tracks (from source list or shuffle) -->
 	{#if implicitUpcoming.length > 0}
 		<div class="mb-3 mt-6 flex items-center gap-2">
 			<h3 class="text-xs font-semibold uppercase tracking-wider text-text-muted">
-				Next from Shuffle
+				{playerState.shuffled ? 'Next from Shuffle' : 'Up Next'}
 			</h3>
-			<Icon name="shuffle" size={12} class="text-accent" />
+			{#if playerState.shuffled}
+				<Icon name="shuffle" size={12} class="text-accent" />
+			{/if}
 		</div>
 
-		<ul
-			use:dndzone={{ items: shuffleDragItems, flipDurationMs, dropTargetStyle: {}, dragHandleSelector: '.drag-handle' }}
-			onconsider={handleShuffleDndConsider}
-			onfinalize={handleShuffleDndFinalize}
-			class="space-y-1"
-		>
-			{#each shuffleDragItems as track, index (track.id)}
-				<li class="group flex items-center gap-2 rounded-lg p-2 hover:bg-surface-overlay">
-					<button
-						class="drag-handle shrink-0 cursor-grab touch-none text-text-muted opacity-50 transition-opacity hover:text-text-secondary group-hover:opacity-100"
-						aria-label="Drag to reorder"
-					>
-						<Icon name="drag-vertical" size={16} />
-					</button>
+		{#if playerState.shuffled}
+			<ul
+				use:dndzone={{ items: shuffleDragItems, flipDurationMs, dropTargetStyle: {}, dragHandleSelector: '.drag-handle' }}
+				onconsider={handleShuffleDndConsider}
+				onfinalize={handleShuffleDndFinalize}
+				class="space-y-1"
+			>
+				{#each shuffleDragItems as track, index (track.id)}
+					<li class="group flex items-center gap-2 rounded-lg p-2 hover:bg-surface-overlay">
+						<button
+							class="drag-handle shrink-0 cursor-grab touch-none text-text-muted opacity-50 transition-opacity hover:text-text-secondary group-hover:opacity-100"
+							aria-label="Drag to reorder"
+						>
+							<Icon name="drag-vertical" size={16} />
+						</button>
 
-					<span class="w-5 shrink-0 text-center text-xs text-text-muted">{index + 1}</span>
+						<span class="w-5 shrink-0 text-center text-xs text-text-muted">{index + 1}</span>
 
-					{#if track.albumArt}
-						<img src={track.albumArt} alt="" class="h-9 w-9 shrink-0 rounded" />
-					{:else}
-						<div class="flex h-9 w-9 shrink-0 items-center justify-center rounded bg-surface-overlay text-text-muted">
-							<Icon name="music" size={14} />
+						{#if track.albumArt}
+							<img src={track.albumArt} alt="" class="h-9 w-9 shrink-0 rounded" />
+						{:else}
+							<div class="flex h-9 w-9 shrink-0 items-center justify-center rounded bg-surface-overlay text-text-muted">
+								<Icon name="music" size={14} />
+							</div>
+						{/if}
+
+						<div class="min-w-0 flex-1">
+							<p class="truncate text-sm text-text-primary">{track.title}</p>
+							<p class="truncate text-xs text-text-secondary">{track.artist}</p>
 						</div>
-					{/if}
 
-					<div class="min-w-0 flex-1">
-						<p class="truncate text-sm text-text-primary">{track.title}</p>
-						<p class="truncate text-xs text-text-secondary">{track.artist}</p>
-					</div>
+						<span class="text-xs text-text-muted">{formatDuration(track.durationMs)}</span>
+					</li>
+				{/each}
+			</ul>
+		{:else}
+			<ul class="space-y-1">
+				{#each implicitUpcoming as track, index (track.queueId)}
+					<li class="flex items-center gap-2 rounded-lg p-2 hover:bg-surface-overlay">
+						<span class="w-5 shrink-0 text-center text-xs text-text-muted">{index + 1}</span>
 
-					<span class="text-xs text-text-muted">{formatDuration(track.durationMs)}</span>
-				</li>
-			{/each}
-		</ul>
+						{#if track.albumArt}
+							<img src={track.albumArt} alt="" class="h-9 w-9 shrink-0 rounded" />
+						{:else}
+							<div class="flex h-9 w-9 shrink-0 items-center justify-center rounded bg-surface-overlay text-text-muted">
+								<Icon name="music" size={14} />
+							</div>
+						{/if}
+
+						<div class="min-w-0 flex-1">
+							<p class="truncate text-sm text-text-primary">{track.title}</p>
+							<p class="truncate text-xs text-text-secondary">{track.artist}</p>
+						</div>
+
+						<span class="text-xs text-text-muted">{formatDuration(track.durationMs)}</span>
+					</li>
+				{/each}
+			</ul>
+		{/if}
 	{:else if playerState.queue.length === 0}
 		<div class="mb-3 flex items-center justify-between">
 			<h3 class="text-xs font-semibold uppercase tracking-wider text-text-muted">
@@ -203,7 +230,7 @@
 			{#if playerState.shuffled}
 				No more tracks to shuffle
 			{:else}
-				Queue is empty — enable shuffle to preview upcoming tracks
+				Queue is empty
 			{/if}
 		</p>
 	{/if}
