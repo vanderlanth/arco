@@ -16,12 +16,12 @@
 		if (playerState.error) errorDismissed = false;
 	});
 
-	// --- Preload pool: fetch next 3 tracks as Blobs for instant playback ---
+	// --- Preload pool: current + next 1 track as Blobs for background playback ---
 	const preloadCache = new Map<string, string>();
 	const preloadInFlight = new Map<string, AbortController>();
 	const preloadFailed = new Map<string, number>();
 	const MAX_RETRIES = 2;
-	const POOL_SIZE = 6;
+	const POOL_SIZE = 2;
 
 	function preloadKey(track: { youtubeId?: string | null; id: number }): string {
 		return track.youtubeId ?? String(track.id);
@@ -63,10 +63,14 @@
 			}
 		}
 
-		// Preload current track first (priority), then upcoming — all via stream-blob
+		// Preload current track first (priority), then next 1 — all via stream-blob
 		// so the browser fetch stays same-origin (no CORS). Once a track's blob is ready
 		// it lives in memory and survives lock screen / backgrounding with no network.
-		const toPreload: typeof upcoming = current ? [current, ...upcoming] : upcoming;
+		const next = upcoming[0];
+		const toPreload: typeof upcoming = [
+			...(current ? [current] : []),
+			...(next ? [next] : [])
+		];
 
 		for (const track of toPreload) {
 			const key = preloadKey(track);
