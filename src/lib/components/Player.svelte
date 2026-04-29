@@ -52,7 +52,8 @@
 
 	$effect(() => {
 		const upcoming = playerState.upNext;
-		const currentKey = playerState.currentTrack ? preloadKey(playerState.currentTrack) : null;
+		const current = playerState.currentTrack;
+		const currentKey = current ? preloadKey(current) : null;
 		const neededKeys = new Set(upcoming.map(preloadKey));
 		if (currentKey) neededKeys.add(currentKey);
 
@@ -62,7 +63,12 @@
 			}
 		}
 
-		for (const track of upcoming) {
+		// Preload current track first (priority), then upcoming — all via stream-blob
+		// so the browser fetch stays same-origin (no CORS). Once a track's blob is ready
+		// it lives in memory and survives lock screen / backgrounding with no network.
+		const toPreload: typeof upcoming = current ? [current, ...upcoming] : upcoming;
+
+		for (const track of toPreload) {
 			const key = preloadKey(track);
 			if (preloadCache.has(key) || preloadInFlight.has(key)) continue;
 			if ((preloadFailed.get(key) ?? 0) >= MAX_RETRIES) continue;
@@ -70,8 +76,6 @@
 			const ctrl = new AbortController();
 			preloadInFlight.set(key, ctrl);
 
-			// Use /api/stream-blob which pipes through yt-dlp (a subprocess) rather than
-			// Node.js fetch — outbound Node.js requests are blocked on shared hosting.
 			const blobEndpoint = playerState.getStreamUrl(track).replace('/api/stream', '/api/stream-blob');
 			fetch(blobEndpoint, { signal: ctrl.signal })
 				.then((res) => {
@@ -81,7 +85,20 @@
 				.then((blob) => {
 					preloadInFlight.delete(key);
 					preloadFailed.delete(key);
-					preloadCache.set(key, URL.createObjectURL(blob));
+					const blobUrl = URL.createObjectURL(blob);
+
+					// If this blob is for the current track and audio is still on a stream
+					// URL, swap immediately — blob survives background, stream does not.
+					const isStillCurrent =
+						playerState.currentTrack && preloadKey(playerState.currentTrack) === key;
+					if (isStillCurrent && audioEl && !audioEl.src.startsWith('blob:')) {
+						const pos = audioEl.currentTime;
+						audioEl.src = blobUrl;
+						audioEl.currentTime = pos;
+						audioEl.play().catch(() => {});
+					} else {
+						preloadCache.set(key, blobUrl);
+					}
 				})
 				.catch((err) => {
 					preloadInFlight.delete(key);
@@ -93,21 +110,37 @@
 	});
 
 
-	// --- Re-assert playback when returning from background / lock screen ---
+	// --- Re-assert playback when backgrounding / returning from background / lock screen ---
 	function handleVisibilityChange() {
-		if (document.visibilityState !== 'visible') return;
 		if (!playerState.currentTrack || !playerState.isPlaying || !audioEl) return;
 
+		if (document.visibilityState === 'hidden') {
+			// App is going to background / lock screen. If the current track's blob is
+			// already cached, swap to it now — a blob survives with no network connection,
+			// a stream URL will be killed by the OS.
+			if (!audioEl.src.startsWith('blob:')) {
+				const key = preloadKey(playerState.currentTrack);
+				const blobUrl = consumePreload(key);
+				if (blobUrl) {
+					const pos = audioEl.currentTime;
+					audioEl.src = blobUrl;
+					audioEl.currentTime = pos;
+					audioEl.play().catch(() => {});
+				}
+			}
+			return;
+		}
+
+		// Returning to foreground
 		updateMediaMetadata(playerState.currentTrack);
 
 		if (audioEl.paused) {
 			audioEl.play().catch(() => {});
 		} else if (audioEl.readyState < 3 || playerState.loading) {
-			// Audio is stalled/buffering after coming back from background — reload
+			// Stalled after coming back — reload from blob if available, else fresh stream
 			const track = playerState.currentTrack;
 			const pos = audioEl.currentTime;
-			const key = preloadKey(track);
-			const blobUrl = consumePreload(key);
+			const blobUrl = consumePreload(preloadKey(track));
 			audioEl.src = blobUrl ?? playerState.getStreamUrl(track);
 			audioEl.currentTime = pos;
 			audioEl.play().catch(() => {});
